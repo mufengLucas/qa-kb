@@ -1,0 +1,943 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>QA 团队工作台</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- ============================================================ 启动中 -->
+      <div v-if="booting" class="empty" style="min-height: 60vh; display: grid; place-items: center">
+        正在加载…
+      </div>
+
+      <!-- ============================================================ 登录 -->
+      <div v-else-if="!user" class="login-wrap">
+        <div class="login-card">
+          <h1>QA 团队工作台</h1>
+          <p class="muted">知识库 · 周报 · 项目进度</p>
+
+          <form @submit.prevent="doLogin">
+            <div class="field">
+              <label for="login-name">登录名</label>
+              <input
+                id="login-name"
+                class="input"
+                v-model.trim="loginForm.login"
+                autocomplete="username"
+                autofocus
+                placeholder="例如 admin"
+              />
+            </div>
+            <div class="field">
+              <label for="login-password">密码</label>
+              <input
+                id="login-password"
+                class="input"
+                type="password"
+                v-model="loginForm.password"
+                autocomplete="current-password"
+                placeholder="请输入密码"
+              />
+            </div>
+            <button class="btn primary" type="submit" style="width: 100%" :disabled="loginBusy">
+              {{ loginBusy ? '登录中…' : '登录' }}
+            </button>
+          </form>
+
+          <p class="muted small" style="margin: 18px 0 0">
+            首次使用请用管理员账号登录，并在「成员」中为团队创建账号。
+          </p>
+        </div>
+      </div>
+
+      <!-- ============================================================ 主框架 -->
+      <div v-else class="shell">
+        <header class="topbar">
+          <div class="brand">
+            <span class="brand-badge">QA</span>
+            <span class="full">团队工作台</span>
+          </div>
+
+          <nav class="tabs">
+            <button class="tab" :class="{ active: tab === 'kb' }" @click="tab = 'kb'">知识库</button>
+            <button class="tab" :class="{ active: tab === 'reports' }" @click="tab = 'reports'">
+              周报
+            </button>
+            <button class="tab" :class="{ active: tab === 'projects' }" @click="tab = 'projects'">
+              项目进度
+            </button>
+            <button
+              v-if="isAdmin"
+              class="tab"
+              :class="{ active: tab === 'members' }"
+              @click="tab = 'members'"
+            >
+              成员
+            </button>
+          </nav>
+
+          <div class="topbar-right">
+            <div class="user-chip">
+              <span class="avatar">{{ (user.name || user.login || '?').slice(0, 1) }}</span>
+              <span class="who"><b>{{ user.name }}</b> · {{ user.role }}</span>
+            </div>
+            <button class="btn sm ghost" @click="doLogout">退出</button>
+          </div>
+        </header>
+
+        <!-- ======================================================== 知识库 -->
+        <div v-if="tab === 'kb'" class="layout">
+          <aside class="sidebar">
+            <div class="sidebar-head">
+              <select class="space-select" v-model.number="spaceId" @change="changeSpace">
+                <option v-for="space in spaces" :key="space.id" :value="space.id">
+                  {{ space.name }}
+                </option>
+                <option v-if="!spaces.length" :value="null">暂无空间</option>
+              </select>
+              <div class="row" style="margin-top: 10px">
+                <button class="btn sm primary" v-if="canWrite" @click="startNew(null)">新建页面</button>
+                <button class="btn sm" @click="openTrash">回收站</button>
+                <button
+                  v-if="canWrite"
+                  class="btn sm ghost"
+                  style="margin-left: auto"
+                  @click="showSpaceForm = !showSpaceForm"
+                >
+                  + 空间
+                </button>
+                <button
+                  v-if="canWrite"
+                  class="btn sm ghost"
+                  @click="showSpaceManage = !showSpaceManage"
+                >
+                  管理
+                </button>
+              </div>
+              <div v-if="showSpaceForm" style="margin-top: 10px">
+                <input
+                  class="input"
+                  v-model="spaceForm.name"
+                  placeholder="空间名称，例如 测试规范"
+                  style="margin-bottom: 6px"
+                />
+                <input
+                  class="input"
+                  v-model="spaceForm.slug"
+                  placeholder="标识（可留空自动生成）"
+                  style="margin-bottom: 6px"
+                />
+                <div class="row">
+                  <button class="btn sm primary" @click="createSpace">创建</button>
+                  <button class="btn sm ghost" @click="showSpaceForm = false">取消</button>
+                </div>
+              </div>
+
+              <!-- 空间管理：删除下拉列表中的空间（硬删除） -->
+              <div v-if="showSpaceManage" style="margin-top: 10px">
+                <div class="muted small" style="margin-bottom: 6px">
+                  删除空间会连带永久删除其中全部页面（与页面回收站不同，不可恢复）
+                </div>
+                <div v-if="!spaces.length" class="muted small">暂无空间</div>
+                <div
+                  v-for="space in spaces"
+                  :key="space.id"
+                  class="row"
+                  style="margin-bottom: 6px"
+                >
+                  <span style="flex: 1; overflow: hidden; text-overflow: ellipsis">
+                    {{ space.name }}
+                  </span>
+                  <button
+                    class="btn sm ghost"
+                    :disabled="spaceBusy"
+                    @click="deleteSpace(space)"
+                  >
+                    删除
+                  </button>
+                </div>
+                <div class="row">
+                  <button class="btn sm ghost" @click="showSpaceManage = false">收起</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="sidebar-body">
+              <page-tree-node
+                v-for="node in tree"
+                :key="node.id"
+                :node="node"
+                :active-id="activePageId"
+                @open="openPage"
+              ></page-tree-node>
+              <div v-if="!tree.length" class="empty small">这个空间还没有页面</div>
+            </div>
+          </aside>
+
+          <main class="main">
+            <!-- 搜索 -->
+            <div class="searchbar">
+              <input
+                class="input"
+                v-model="searchQ"
+                placeholder="搜索标题与正文（中文 1~2 字自动模糊匹配）"
+              />
+              <button class="btn" @click="runSearch(searchQ)" :disabled="searchBusy">搜索</button>
+            </div>
+
+            <div v-if="searchQ && hits.length" class="card" style="margin-bottom: 16px">
+              <h3>搜索结果（{{ hits.length }}）</h3>
+              <div class="search-hits">
+                <button
+                  v-for="hit in hits"
+                  :key="hit.id"
+                  class="hit"
+                  type="button"
+                  @click="openHit(hit)"
+                >
+                  <b>{{ hit.title }}</b>
+                  <span>{{ hit.snippet }}</span>
+                </button>
+              </div>
+            </div>
+            <div
+              v-else-if="searchQ && !searchBusy && !hits.length"
+              class="card"
+              style="margin-bottom: 16px"
+            >
+              <span class="muted">没有匹配的内容。</span>
+            </div>
+
+            <!-- 回收站 -->
+            <div v-if="showTrash" class="card">
+              <div class="page-head" style="margin-bottom: 10px">
+                <div>
+                  <h2 style="font-size: 18px">回收站</h2>
+                  <div class="sub">删除的页面可以在这里恢复</div>
+                </div>
+                <div class="actions">
+                  <button class="btn sm" @click="showTrash = false">返回</button>
+                </div>
+              </div>
+              <div v-if="!trash.length" class="empty">回收站是空的</div>
+              <div class="list">
+                <div v-for="item in trash" :key="item.id" class="list-item">
+                  <div class="row">
+                    <div>
+                      <h4>{{ item.title }}</h4>
+                      <span class="muted small">删除于 {{ item.deletedAt }}</span>
+                    </div>
+                    <div class="spacer"></div>
+                    <button class="btn sm" @click="restorePage(item.id)">恢复</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 编辑器 -->
+            <div v-else-if="editing" class="card">
+              <div class="page-head" style="margin-bottom: 12px">
+                <div>
+                  <h2 style="font-size: 18px">{{ editor.id ? '编辑页面' : '新建页面' }}</h2>
+                  <div class="sub">{{ currentSpace ? currentSpace.name : '' }}</div>
+                </div>
+                <div class="actions">
+                  <button class="btn sm" @click="cancelEdit">取消</button>
+                  <button class="btn sm primary" @click="savePage">保存</button>
+                </div>
+              </div>
+
+              <div class="field">
+                <label>标题</label>
+                <input class="input" v-model="editor.title" placeholder="页面标题" />
+              </div>
+
+              <div class="grid-2">
+                <div class="field">
+                  <label>状态</label>
+                  <select class="select" v-model="editor.status">
+                    <option value="PUBLISHED">已发布</option>
+                    <option value="DRAFT">草稿</option>
+                  </select>
+                </div>
+                <div class="field" v-if="!editor.id">
+                  <label>父页面</label>
+                  <select class="select" v-model.number="editor.parentId">
+                    <option :value="null">（顶层页面）</option>
+                    <option v-for="item in flatTree" :key="item.id" :value="item.id">
+                      {{ '— '.repeat(item.depth) }}{{ item.title }}
+                    </option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>标签（逗号分隔）</label>
+                  <input class="input" v-model="editor.tagsText" placeholder="接口, 回归, 规范" />
+                </div>
+              </div>
+
+              <div class="field">
+                <label>正文（Markdown）</label>
+                <textarea class="textarea" v-model="editor.contentMd"></textarea>
+              </div>
+
+              <div v-if="editor.contentMd" class="divider"></div>
+              <div v-if="editor.contentMd" class="doc" v-html="editorPreview"></div>
+            </div>
+
+            <!-- 历史版本 -->
+            <div v-else-if="showRevisions" class="card">
+              <div class="page-head" style="margin-bottom: 10px">
+                <div>
+                  <h2 style="font-size: 18px">历史版本</h2>
+                  <div class="sub">{{ current ? current.title : '' }}</div>
+                </div>
+                <div class="actions">
+                  <button class="btn sm" @click="showRevisions = false">返回</button>
+                </div>
+              </div>
+              <div v-if="!revisions.length" class="empty">暂无历史版本</div>
+              <div class="list">
+                <div v-for="rev in revisions" :key="rev.id" class="list-item">
+                  <div class="row">
+                    <div>
+                      <h4>{{ rev.title }}</h4>
+                      <span class="muted small">{{ rev.createdAt }}</span>
+                    </div>
+                    <div class="spacer"></div>
+                    <button class="btn sm" v-if="canWrite" @click="rollback(rev)">回滚到此版本</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 阅读 -->
+            <div v-else-if="current">
+              <div class="page-head">
+                <div>
+                  <h2>{{ current.title }}</h2>
+                  <div class="sub">
+                    <span class="pill" :class="current.status === 'PUBLISHED' ? 'ok' : 'warn'">
+                      {{ current.status === 'PUBLISHED' ? '已发布' : '草稿' }}
+                    </span>
+                    <span style="margin-left: 8px">更新于 {{ current.updatedAt }}</span>
+                  </div>
+                </div>
+                <div class="actions">
+                  <button class="btn sm" v-if="canWrite" @click="startNew(current.id)">新建子页</button>
+                  <button class="btn sm" @click="openRevisions">历史版本</button>
+                  <button class="btn sm primary" v-if="canWrite" @click="startEdit">编辑</button>
+                  <button class="btn sm danger" v-if="canWrite" @click="deletePage">删除</button>
+                </div>
+              </div>
+
+              <div v-if="pageTags.length" class="row" style="margin-bottom: 14px">
+                <span v-for="tag in pageTags" :key="tag.name" class="pill brand"># {{ tag.name }}</span>
+              </div>
+
+              <article class="card doc" v-html="renderedContent"></article>
+            </div>
+
+            <!-- 空状态 -->
+            <div v-else class="empty">
+              <div style="font-size: 34px; margin-bottom: 8px">📚</div>
+              <div v-if="spaces.length">从左侧选择页面，或新建一个页面</div>
+              <div v-else>还没有空间，先用左侧「+ 空间」创建第一个知识库空间</div>
+            </div>
+          </main>
+        </div>
+
+        <!-- ======================================================== 周报 -->
+        <main v-else-if="tab === 'reports'" class="main wide">
+          <div class="page-head">
+            <div>
+              <h2>每周工作</h2>
+              <div class="sub">填写本周进展、计划与阻塞，维护本周清单，提交后进入团队周报</div>
+            </div>
+            <div class="actions">
+              <button class="btn sm" @click="shiftWeek(-1)">上一周</button>
+              <span class="pill brand" style="min-width: 160px; text-align: center">
+                {{ weekStart }} ~ {{ weekEnd }}
+              </span>
+              <button class="btn sm" @click="shiftWeek(1)">下一周</button>
+              <button class="btn sm ghost" @click="weekStart = mondayOfToday">本周</button>
+            </div>
+          </div>
+
+          <div class="grid-2" style="align-items: start">
+            <div>
+              <div class="card">
+                <h3>我的周报 · {{ weekStart }}</h3>
+
+                <div class="field">
+                  <label>本周完成了什么</label>
+                  <textarea
+                    class="textarea"
+                    style="min-height: 110px"
+                    v-model="report.done"
+                    placeholder="例如：完成登录模块 12 条用例，发现 2 个阻塞缺陷"
+                  ></textarea>
+                </div>
+
+                <div class="field">
+                  <label>下周计划</label>
+                  <textarea
+                    class="textarea"
+                    style="min-height: 80px"
+                    v-model="report.plan"
+                    placeholder="例如：回归支付流程，补齐超时场景用例"
+                  ></textarea>
+                </div>
+
+                <div class="field">
+                  <label>阻塞与风险</label>
+                  <textarea
+                    class="textarea"
+                    style="min-height: 70px"
+                    v-model="report.blockers"
+                    placeholder="没有就留空"
+                  ></textarea>
+                </div>
+
+                <div class="field">
+                  <label>关联项目（可多选）</label>
+                  <div class="row" v-if="projects.length">
+                    <label v-for="proj in projects" :key="proj.project.id" class="pill">
+                      <input
+                        type="checkbox"
+                        :value="proj.project.id"
+                        v-model="linkedProjectIds"
+                        style="margin-right: 4px"
+                      />
+                      {{ proj.project.name }}
+                    </label>
+                  </div>
+                  <span v-else class="muted small">还没有项目，去「项目进度」创建</span>
+                </div>
+
+                <div class="row">
+                  <button
+                    class="btn"
+                    :disabled="reportBusy || !canWrite"
+                    @click="saveReport('draft')"
+                  >
+                    保存草稿
+                  </button>
+                  <button
+                    class="btn primary"
+                    :disabled="reportBusy || !canWrite"
+                    @click="saveReport('submitted')"
+                  >
+                    提交周报
+                  </button>
+                  <span class="muted small" v-if="report.status === 'submitted'">当前状态：已提交</span>
+                  <span class="muted small" v-else>当前状态：草稿</span>
+                </div>
+              </div>
+
+              <!-- 本周清单：回车添加、勾选完成、可关联项目任务 -->
+              <div class="card">
+                <h3>本周清单</h3>
+                <div class="row" style="margin-bottom: 10px">
+                  <input
+                    class="input"
+                    v-model="newItemTitle"
+                    placeholder="输入一条，回车添加（如：补齐支付回归用例）"
+                    @keydown.enter.prevent="addItem"
+                  />
+                  <button
+                    class="btn sm"
+                    :disabled="reportBusy || !newItemTitle.trim()"
+                    @click="addItem"
+                  >
+                    添加
+                  </button>
+                </div>
+
+                <div v-if="!items.length" class="empty small">
+                  还没有清单条目，回车添加第一条；关联项目后勾选会同步任务状态
+                </div>
+                <div class="list" v-else>
+                  <div v-for="item in items" :key="item.id" class="list-item">
+                    <div class="row">
+                      <input
+                        type="checkbox"
+                        :checked="item.done"
+                        :disabled="reportBusy"
+                        @change="toggleItem(item, $event)"
+                        style="margin-right: 8px"
+                      />
+                      <span
+                        :class="item.done ? 'muted' : ''"
+                        :style="item.done ? 'text-decoration: line-through' : ''"
+                        style="flex: 1"
+                      >
+                        {{ item.title }}
+                      </span>
+                      <span class="pill ok" v-if="item.taskId">已关联任务</span>
+                      <select
+                        class="select"
+                        style="width: 150px"
+                        v-if="!item.taskId && projects.length"
+                        :disabled="reportBusy"
+                        :value="item.projectId || ''"
+                        @change="linkItemProject(item, $event)"
+                      >
+                        <option value="">关联项目…</option>
+                        <option v-for="proj in projects" :key="proj.project.id" :value="proj.project.id">
+                          {{ proj.project.name }}
+                        </option>
+                      </select>
+                      <button
+                        class="btn sm ghost"
+                        :disabled="reportBusy"
+                        @click="removeItem(item)"
+                        title="删除该条"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="card">
+                <h3>本周清单完成情况</h3>
+                <div class="row" style="margin-bottom: 10px">
+                  <span class="pill brand">已完成 {{ doneCount }} / {{ items.length }}</span>
+                </div>
+                <div v-if="doneItems.length">
+                  <div class="muted small" style="margin-bottom: 6px">已完成条目</div>
+                  <ul style="margin: 0 0 12px; padding-left: 20px">
+                    <li v-for="item in doneItems" :key="item.id">
+                      <span :style="'text-decoration: line-through'">{{ item.title }}</span>
+                    </li>
+                  </ul>
+                </div>
+                <div v-if="pendingItems.length">
+                  <div class="muted small" style="margin-bottom: 6px">进行中</div>
+                  <ul style="margin: 0; padding-left: 20px">
+                    <li v-for="item in pendingItems" :key="item.id">{{ item.title }}</li>
+                  </ul>
+                </div>
+                <div v-if="!items.length" class="muted small">本周清单还是空的</div>
+              </div>
+
+              <div class="card">
+                <h3>团队周报 · {{ weekStart }}</h3>
+                <div v-if="isAdmin && missingNames.length" class="pill warn" style="margin-bottom: 10px">
+                  未提交：{{ missingNames.join('、') }}
+                </div>
+                <div v-if="!teamReports.length" class="empty small">本周还没有人提交周报</div>
+                <div class="list">
+                  <div v-for="item in teamReports" :key="item.id" class="list-item">
+                    <div class="row" style="margin-bottom: 6px">
+                      <b>{{ item.userName }}</b>
+                      <span class="pill" :class="item.status === 'submitted' ? 'ok' : 'warn'">
+                        {{ item.status === 'submitted' ? '已提交' : '草稿' }}
+                      </span>
+                      <span class="spacer"></span>
+                      <span class="muted small">{{ item.updatedAt }}</span>
+                    </div>
+                    <div v-if="item.done" class="small" style="white-space: pre-wrap">{{ item.done }}</div>
+                    <div v-if="item.blockers" class="small" style="color: var(--warn); margin-top: 6px">
+                      阻塞：{{ item.blockers }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <!-- ======================================================== 项目进度 -->
+        <main v-else-if="tab === 'projects'" class="main wide">
+          <div v-if="projectDetail">
+            <div class="page-head">
+              <div>
+                <h2>{{ projectDetail.project.name }}</h2>
+                <div class="sub">
+                  {{ projectDetail.project.projectKey }} ·
+                  {{ projectStatusLabel(projectDetail.project.status) }}
+                  <span v-if="projectDetail.project.startDate">
+                    · {{ projectDetail.project.startDate }} ~
+                    {{ projectDetail.project.endDate || '未定' }}
+                  </span>
+                </div>
+              </div>
+              <div class="actions">
+                <button class="btn sm" @click="closeProject">返回项目列表</button>
+                <button class="btn sm danger" @click="deleteProject">删除项目</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="progress">
+                <i :style="{ width: projectDetail.progress.percent + '%' }"></i>
+              </div>
+              <div class="progress-meta">
+                <span>
+                  已完成 {{ projectDetail.progress.done }} / {{ projectDetail.progress.total }} 项任务
+                </span>
+                <span>{{ projectDetail.progress.percent }}%</span>
+              </div>
+              <p v-if="projectDetail.project.description" class="muted" style="margin-bottom: 0">
+                {{ projectDetail.project.description }}
+              </p>
+            </div>
+
+            <div class="card">
+              <div class="row">
+                <h3>里程碑</h3>
+                <span class="spacer"></span>
+                <button
+                  class="btn sm primary"
+                  v-if="canWrite"
+                  @click="showNewMilestone = !showNewMilestone"
+                >
+                  新建里程碑
+                </button>
+              </div>
+              <div v-if="showNewMilestone" class="grid-2" style="margin-bottom: 12px">
+                <div class="field">
+                  <label>名称</label>
+                  <input class="input" v-model="newMilestone.name" placeholder="例如 发布" />
+                </div>
+                <div class="field">
+                  <label>截止日期</label>
+                  <input class="input" type="date" v-model="newMilestone.dueDate" />
+                </div>
+              </div>
+              <div v-if="showNewMilestone" class="row" style="margin-bottom: 12px">
+                <button class="btn primary" @click="createMilestone">创建</button>
+                <button class="btn ghost" @click="showNewMilestone = false">取消</button>
+              </div>
+              <div v-if="!projectDetail.milestones.length" class="muted small">暂无里程碑</div>
+              <div class="list">
+                <div v-for="milestone in projectDetail.milestones" :key="milestone.id" class="list-item">
+                  <div class="row">
+                    <b>{{ milestone.name }}</b>
+                    <span class="pill" :class="milestone.status === 'DONE' ? 'ok' : 'warn'">
+                      {{ milestone.status === 'DONE' ? '已完成' : '进行中' }}
+                    </span>
+                    <span class="spacer"></span>
+                    <span class="muted small">截止 {{ milestone.dueDate || '未设置' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="row">
+                <h3>任务（{{ projectDetail.tasks.length }}）</h3>
+                <span class="spacer"></span>
+                <button class="btn sm primary" v-if="canWrite" @click="showNewTask = !showNewTask">
+                  新建任务
+                </button>
+              </div>
+              <div v-if="showNewTask" class="grid-2" style="margin-bottom: 12px">
+                <div class="field">
+                  <label>任务标题</label>
+                  <input class="input" v-model="newTask.title" placeholder="例如 编写登录用例" />
+                </div>
+                <div class="field">
+                  <label>负责人</label>
+                  <select class="select" v-model="newTask.assigneeId">
+                    <option value="">未分配</option>
+                    <option v-for="member in members" :key="member.id" :value="member.id">
+                      {{ member.name }}
+                    </option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>优先级</label>
+                  <select class="select" v-model="newTask.priority">
+                    <option v-for="p in [1, 2, 3, 4]" :key="p" :value="p">
+                      {{ priorityLabel(p) }}
+                    </option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>状态</label>
+                  <select class="select" v-model="newTask.status">
+                    <option v-for="status in taskStatusOptions()" :key="status" :value="status">
+                      {{ taskStatusLabel(status) }}
+                    </option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>所属里程碑</label>
+                  <select class="select" v-model="newTask.milestoneId">
+                    <option value="">不关联</option>
+                    <option
+                      v-for="milestone in projectDetail.milestones"
+                      :key="milestone.id"
+                      :value="milestone.id"
+                    >
+                      {{ milestone.name }}
+                    </option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>开始日期</label>
+                  <input class="input" type="date" v-model="newTask.startDate" />
+                </div>
+                <div class="field">
+                  <label>截止日期</label>
+                  <input class="input" type="date" v-model="newTask.dueDate" />
+                </div>
+              </div>
+              <div v-if="showNewTask" class="row" style="margin-bottom: 12px">
+                <button class="btn primary" @click="createTask">创建</button>
+                <button class="btn ghost" @click="showNewTask = false">取消</button>
+              </div>
+              <div v-if="!projectDetail.tasks.length" class="muted small">暂无任务</div>
+              <table v-else class="table">
+                <thead>
+                  <tr>
+                    <th>任务</th>
+                    <th style="width: 110px">负责人</th>
+                    <th style="width: 100px">优先级</th>
+                    <th style="width: 110px">进度</th>
+                    <th style="width: 130px">截止</th>
+                    <th style="width: 150px">状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="entry in projectDetail.tasks" :key="entry.task.id">
+                    <td>
+                      {{ entry.task.title }}
+                      <span v-if="entry.overdue" class="pill danger">已逾期</span>
+                    </td>
+                    <td>{{ assigneeName(entry.task.assigneeId) }}</td>
+                    <td>{{ priorityLabel(entry.task.priority) }}</td>
+                    <td>{{ entry.task.progress }}%</td>
+                    <td>{{ entry.task.dueDate || '—' }}</td>
+                    <td>
+                      <select
+                        class="select"
+                        :disabled="!canWrite"
+                        :value="entry.task.status"
+                        @change="changeTaskStatus(entry.task, $event.target.value)"
+                      >
+                        <option
+                          v-for="status in taskStatusOptions()"
+                          :key="status"
+                          :value="status"
+                        >
+                          {{ taskStatusLabel(status) }}
+                        </option>
+                      </select>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div v-else>
+            <div class="page-head">
+              <div>
+                <h2>项目进度</h2>
+                <div class="sub">进度按「已完成任务 / 总任务」自动计算</div>
+              </div>
+              <div class="actions">
+                <button class="btn sm primary" v-if="canWrite" @click="showNewProject = !showNewProject">
+                  新建项目
+                </button>
+              </div>
+            </div>
+
+            <div v-if="showNewProject" class="card" style="margin-bottom: 16px">
+              <h3>新建项目</h3>
+              <div class="grid-2">
+                <div class="field">
+                  <label>项目名称</label>
+                  <input class="input" v-model="newProject.name" placeholder="例如 回归测试项目" />
+                </div>
+                <div class="field">
+                  <label>项目标识（大写字母/数字，2~10 位）</label>
+                  <input class="input" v-model="newProject.projectKey" placeholder="例如 QA2026" />
+                </div>
+                <div class="field">
+                  <label>状态</label>
+                  <select class="select" v-model="newProject.status">
+                    <option v-for="status in projectStatusOptions()" :key="status" :value="status">
+                      {{ projectStatusLabel(status) }}
+                    </option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>开始日期</label>
+                  <input class="input" type="date" v-model="newProject.startDate" />
+                </div>
+                <div class="field">
+                  <label>结束日期</label>
+                  <input class="input" type="date" v-model="newProject.endDate" />
+                </div>
+                <div class="field">
+                  <label>描述</label>
+                  <input class="input" v-model="newProject.description" placeholder="可选" />
+                </div>
+              </div>
+              <div class="row">
+                <button class="btn primary" @click="createProject">创建</button>
+                <button class="btn ghost" @click="showNewProject = false">取消</button>
+              </div>
+            </div>
+
+            <div v-if="!projects.length" class="empty">还没有项目</div>
+            <div v-else class="project-grid">
+              <div
+                class="project-card"
+                v-for="item in projects"
+                :key="item.project.id"
+                @click="openProject(item.project.id)"
+              >
+                <div class="row" style="margin-bottom: 4px">
+                  <h4>{{ item.project.name }}</h4>
+                  <span class="spacer"></span>
+                  <span class="pill">{{ projectStatusLabel(item.project.status) }}</span>
+                </div>
+                <div class="muted small" style="margin-bottom: 12px">
+                  {{ item.project.projectKey }}
+                  <span v-if="item.project.endDate"> · 截止 {{ item.project.endDate }}</span>
+                </div>
+                <div class="progress">
+                  <i :style="{ width: item.progress.percent + '%' }"></i>
+                </div>
+                <div class="progress-meta">
+                  <span>{{ item.progress.done }} / {{ item.progress.total }} 项</span>
+                  <span>{{ item.progress.percent }}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <!-- ======================================================== 成员 -->
+        <main v-else-if="tab === 'members' && isAdmin" class="main wide">
+          <div class="page-head">
+            <div>
+              <h2>团队成员</h2>
+              <div class="sub">ADMIN 可管理账号；VIEWER 只能阅读</div>
+            </div>
+            <div class="actions">
+              <button class="btn sm primary" @click="showNewUser = !showNewUser">新建成员</button>
+            </div>
+          </div>
+
+          <div v-if="showNewUser" class="card" style="margin-bottom: 16px">
+            <h3>新建成员</h3>
+            <div class="grid-2">
+              <div class="field">
+                <label>登录名</label>
+                <input class="input" v-model="newUser.login" placeholder="小写字母开头，3~64 位" />
+              </div>
+              <div class="field">
+                <label>姓名</label>
+                <input class="input" v-model="newUser.name" />
+              </div>
+              <div class="field">
+                <label>初始密码</label>
+                <input
+                  class="input"
+                  type="password"
+                  v-model="newUser.password"
+                  placeholder="至少 10 位，且同时包含字母和数字"
+                />
+              </div>
+              <div class="field">
+                <label>角色</label>
+                <select class="select" v-model="newUser.role">
+                  <option value="MEMBER">MEMBER（可编辑内容）</option>
+                  <option value="VIEWER">VIEWER（只读）</option>
+                  <option value="ADMIN">ADMIN（可管理成员）</option>
+                </select>
+              </div>
+            </div>
+            <div class="row">
+              <button class="btn primary" @click="createUser">创建</button>
+              <button class="btn ghost" @click="showNewUser = false">取消</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>姓名</th>
+                  <th>登录名</th>
+                  <th style="width: 180px">角色</th>
+                  <th style="width: 90px">启用</th>
+                  <th style="width: 190px">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="member in users" :key="member.id">
+                  <td><b>{{ member.name }}</b></td>
+                  <td class="muted">{{ member.login }}</td>
+                  <td>
+                    <select
+                      class="select"
+                      :value="member.role"
+                      @change="updateUser(member, { role: $event.target.value })"
+                    >
+                      <option value="ADMIN">ADMIN</option>
+                      <option value="MEMBER">MEMBER</option>
+                      <option value="VIEWER">VIEWER</option>
+                    </select>
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      :checked="member.active"
+                      @change="updateUser(member, { active: $event.target.checked })"
+                    />
+                  </td>
+                  <td>
+                    <button class="btn sm" @click="resetPassword(member)">重置密码</button>
+                    <button class="btn sm danger" @click="deleteUser(member)">删除</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <div class="row">
+              <div>
+                <h3 style="margin: 0 0 4px">数据备份</h3>
+                <div class="muted small">
+                  每天 02:30 自动备份数据库并轮换旧文件；也可以在这里立即备份一次。
+                </div>
+              </div>
+              <div class="spacer"></div>
+              <button class="btn primary" :disabled="backupBusy" @click="runBackup">
+                {{ backupBusy ? '备份中…' : '立即备份' }}
+              </button>
+            </div>
+            <div v-if="lastBackup" class="muted small" style="margin-top: 10px">
+              最近一次：{{ lastBackup.file }}（{{ (lastBackup.bytes / 1024).toFixed(1) }} KB）
+              <span v-if="lastBackup.offsiteCopied"> · 已复制到异地目录</span>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <!-- ============================================================ 提示 -->
+      <div v-if="notice" class="toast" :class="notice.type">{{ notice.text }}</div>
+    </div>
+
+    <script src="vendor/vue.global.prod.js"></script>
+    <script src="vendor/marked.min.js"></script>
+    <script src="vendor/purify.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

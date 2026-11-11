@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qa.kb.persistence.PageMapper">
+
+  <!-- 自增主键回填：MySQL 用 LAST_INSERT_ID()，SQLite 用 last_insert_rowid() -->
+  <select id="lastInsertId" databaseId="mysql" resultType="long">
+    SELECT LAST_INSERT_ID()
+  </select>
+  <select id="lastInsertId" databaseId="sqlite" resultType="long">
+    SELECT last_insert_rowid()
+  </select>
+</mapper>

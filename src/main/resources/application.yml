@@ -1,0 +1,67 @@
+server:
+  port: ${PORT:8787}
+  address: ${BIND_ADDRESS:0.0.0.0}
+  forward-headers-strategy: native
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+
+spring:
+  application:
+    name: qa-kb
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/qa_kb?useSSL=false&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: ${KB_DB_USER:root}
+    # 公开仓库不存放真实口令：通过环境变量 KB_DB_PASSWORD 注入
+    password: ${KB_DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 2
+      minimum-idle: 1
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+    # MySQL 必须显式启用外键检查
+    connection-init-sql: "SET FOREIGN_KEY_CHECKS=ON"
+  jackson:
+    time-zone: Asia/Shanghai
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 22MB
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-handlers-package: com.qa.kb.persistence.type
+  configuration:
+    map-underscore-to-camel-case: true
+    arg-name-based-constructor-auto-mapping: true
+    default-statement-timeout: 15
+    jdbc-type-for-null: 'NULL'
+
+kb:
+  timezone: Asia/Shanghai
+  session-ttl: 12h
+  upload-dir: ${KB_UPLOAD_DIR:./data/uploads}
+  seed:
+    enabled: ${KB_SEED:true}
+    demo: ${KB_SEED_DEMO:true}
+    admin-login: ${KB_ADMIN_LOGIN:admin}
+    admin-name: ${KB_ADMIN_NAME:管理员}
+    admin-password: ${KB_ADMIN_PASSWORD:change-me-please-1}
+    demo-password: ${KB_DEMO_PASSWORD:change-me-demo-1}
+  backup:
+    enabled: ${KB_BACKUP_ENABLED:true}
+    dir: ${KB_BACKUP_DIR:./data/backups}
+    keep: ${KB_BACKUP_KEEP:14}
+    # 异地副本目录（可填网络共享路径）；留空表示只保留本地备份
+    offsite-dir: ${KB_BACKUP_OFFSITE_DIR:}
+    cron: ${KB_BACKUP_CRON:0 30 2 * * *}
+
+logging:
+  level:
+    root: INFO
+    com.qa.kb: INFO
+  file:
+    name: ${KB_LOG_FILE:./data/qa-kb.log}

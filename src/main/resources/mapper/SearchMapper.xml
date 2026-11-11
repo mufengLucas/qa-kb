@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qa.kb.persistence.SearchMapper">
+
+  <!-- MySQL ngram FULLTEXT：3 字以上（含中英文）走 MATCH ... AGAINST -->
+  <select id="searchFulltext" resultType="com.qa.kb.model.SearchHit">
+    SELECT p.id,
+           p.space_id,
+           p.title,
+           p.slug,
+           SUBSTRING(p.content_md, 1, 300) AS snippet
+    FROM pages p
+    WHERE p.deleted_at IS NULL
+      AND (#{spaceId} IS NULL OR p.space_id = #{spaceId})
+      AND MATCH(p.title, p.content_md) AGAINST (#{q} IN BOOLEAN MODE)
+    ORDER BY MATCH(p.title, p.content_md) AGAINST (#{q} IN BOOLEAN MODE) DESC,
+             p.updated_at DESC
+    LIMIT #{limit}
+  </select>
+
+  <select id="searchLike" resultType="com.qa.kb.model.SearchHit">
+    SELECT p.id,
+           p.space_id,
+           p.title,
+           p.slug,
+           SUBSTRING(p.content_md, 1, 300) AS snippet
+    FROM pages p
+    WHERE p.deleted_at IS NULL
+      AND (#{spaceId} IS NULL OR p.space_id = #{spaceId})
+      AND (p.title LIKE #{pattern} ESCAPE '\\'
+        OR p.content_md LIKE #{pattern} ESCAPE '\\')
+    ORDER BY p.updated_at DESC
+    LIMIT #{limit}
+  </select>
+</mapper>

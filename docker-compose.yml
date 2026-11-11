@@ -1,0 +1,62 @@
+services:
+  db:
+    image: mysql:8.4
+    container_name: qa-kb-db
+    command:
+      - --ngram_token_size=2
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_DATABASE: qa_kb
+      MYSQL_USER: qa
+      MYSQL_PASSWORD: ${DB_PASSWORD:-qa}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-root}
+      TZ: Asia/Shanghai
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qa-kb-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: qa_kb
+      DB_USER: qa
+      DB_PASSWORD: ${DB_PASSWORD:-qa}
+      PORT: "8787"
+      TZ: Asia/Shanghai
+      KB_ADMIN_LOGIN: ${KB_ADMIN_LOGIN:-admin}
+      KB_ADMIN_NAME: ${KB_ADMIN_NAME:-管理员}
+      KB_ADMIN_PASSWORD: ${KB_ADMIN_PASSWORD:-change-me-please-1}
+      KB_SEED: ${KB_SEED:-true}
+      KB_SEED_DEMO: ${KB_SEED_DEMO:-false}
+      KB_LOG_FILE: /app/data/qa-kb.log
+      KB_UPLOAD_DIR: /app/data/uploads
+    ports:
+      - "${APP_PORT:-8787}:8787"
+    volumes:
+      - kb-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8787'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  kb-data:
