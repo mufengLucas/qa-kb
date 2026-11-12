@@ -987,6 +987,53 @@
               <span v-if="lastBackup.offsiteCopied"> · 已复制到异地目录</span>
             </div>
           </div>
+
+          <div class="card">
+            <div class="row">
+              <div>
+                <h3 style="margin: 0 0 4px">操作审计</h3>
+                <div class="muted small">
+                  谁在何时对什么做了什么：写操作与登录记录，最新在前（共 {{ auditTotal }} 条）。
+                </div>
+              </div>
+              <div class="spacer"></div>
+              <button class="btn sm" :disabled="auditBusy" @click="loadAudit">
+                {{ auditBusy ? '加载中…' : '刷新' }}
+              </button>
+            </div>
+            <table class="table" style="margin-top: 12px">
+              <thead>
+                <tr>
+                  <th style="width: 170px">时间</th>
+                  <th style="width: 160px">操作者</th>
+                  <th>动作</th>
+                  <th style="width: 200px">对象</th>
+                  <th style="width: 220px">详情</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in auditRows" :key="row.id">
+                  <td class="muted small">{{ row.createdAt }}</td>
+                  <td>
+                    <template v-if="row.userLogin">
+                      <b>{{ row.userName || row.userLogin }}</b>
+                      <span class="muted small">（{{ row.userLogin }}）</span>
+                    </template>
+                    <span v-else-if="row.userId" class="muted small">已删除用户 #{{ row.userId }}</span>
+                    <span v-else class="muted small">匿名</span>
+                  </td>
+                  <td class="small"><code>{{ row.action }}</code></td>
+                  <td class="small">
+                    {{ row.targetType }}<span v-if="row.targetId"> #{{ row.targetId }}</span>
+                  </td>
+                  <td class="muted small">{{ row.detail }}</td>
+                </tr>
+                <tr v-if="!auditRows.length">
+                  <td colspan="5" class="muted">暂无审计记录（产生写操作后自动出现）</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </main>
       </div>
 

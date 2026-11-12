@@ -200,7 +200,8 @@ CREATE TABLE IF NOT EXISTS report_items (
 CREATE INDEX IF NOT EXISTS idx_report_items_report ON report_items(report_id, sort_order);
 --> statement-breakpoint
 
--- P2 预留：操作审计
+-- P2 操作审计：谁在何时对什么做了什么（与 MySQL db/migration/V1__init.sql 同结构）。
+-- 刻意不设 user_id 外键：成员被删除后审计记录必须保留，登录名快照走查询端 JOIN users。
 CREATE TABLE IF NOT EXISTS audit_log (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER,
@@ -210,6 +211,9 @@ CREATE TABLE IF NOT EXISTS audit_log (
   detail      TEXT    NOT NULL DEFAULT '',
   created_at  TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
 );
+--> statement-breakpoint
+
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 --> statement-breakpoint
 
 -- =====================================================================

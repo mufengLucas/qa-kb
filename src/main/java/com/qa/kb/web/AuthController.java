@@ -1,6 +1,7 @@
 package com.qa.kb.web;
 
 import com.qa.kb.auth.AuthService;
+import com.qa.kb.audit.AuditService;
 import com.qa.kb.security.CurrentUser;
 import com.qa.kb.security.SessionAuthenticationFilter;
 import com.qa.kb.security.SessionUser;
@@ -14,6 +15,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,9 +39,11 @@ public class AuthController {
   }
 
   private final AuthService authService;
+  private final AuditService auditService;
 
-  public AuthController(AuthService authService) {
+  public AuthController(AuthService authService, AuditService auditService) {
     this.authService = authService;
+    this.auditService = auditService;
   }
 
   @PostMapping("/login")
@@ -47,8 +51,16 @@ public class AuthController {
       @Valid @RequestBody LoginRequest body,
       HttpServletRequest request,
       HttpServletResponse response) {
-    AuthService.LoginResult result =
-        authService.login(body.login(), body.password(), WebRequests.clientIp(request));
+    String ip = WebRequests.clientIp(request);
+    AuthService.LoginResult result;
+    try {
+      result = authService.login(body.login(), body.password(), ip);
+    } catch (RuntimeException e) {
+      // 登录失败也要留痕（拦截器跳过本路径，拿不到请求体里的登录名）
+      auditService.record(null, "LOGIN_FAILED", "user", body.login(), "ip=" + ip);
+      throw e;
+    }
+    auditService.record(result.user().id(), "LOGIN", "user", result.user().login(), "ip=" + ip);
     response.addHeader(
         HttpHeaders.SET_COOKIE, sessionCookie(result.token(), authService.sessionTtl()).toString());
     return ResponseEntity.ok(UserView.of(result.user()));
@@ -58,6 +70,14 @@ public class AuthController {
   public ResponseEntity<Void> logout(HttpServletRequest request, HttpServletResponse response) {
     authService.logout(SessionAuthenticationFilter.readToken(request));
     response.addHeader(HttpHeaders.SET_COOKIE, sessionCookie("", Duration.ZERO).toString());
+    // 登出时会话已吊销，SecurityContext 里的 principal 仍在当前请求内可用
+    SessionUser user = currentUserOrNull();
+    auditService.record(
+        user == null ? null : user.id(),
+        "LOGOUT",
+        "user",
+        user == null ? null : user.login(),
+        "ip=" + WebRequests.clientIp(request));
     return ResponseEntity.noContent().build();
   }
 
@@ -87,5 +107,14 @@ public class AuthController {
         .path("/")
         .maxAge(maxAge)
         .build();
+  }
+
+  /** 当前请求已认证用户；登出时会话已吊销但 principal 仍在 SecurityContext 中。 */
+  private static SessionUser currentUserOrNull() {
+    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    if (authentication != null && authentication.getPrincipal() instanceof SessionUser user) {
+      return user;
+    }
+    return null;
   }
 }

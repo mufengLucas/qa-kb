@@ -181,3 +181,17 @@ CREATE TABLE IF NOT EXISTS report_items (
   CONSTRAINT fk_ri_task FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE SET NULL,
   CONSTRAINT fk_ri_project FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
+
+-- P2 操作审计：谁在何时对什么做了什么（与 SQLite db/schema.sql 同结构）。
+-- 刻意不设 user_id 外键：成员被删除后审计记录必须保留，登录名快照走查询端 JOIN users。
+CREATE TABLE IF NOT EXISTS audit_log (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT NULL,
+  action VARCHAR(200) NOT NULL,
+  target_type VARCHAR(50) NOT NULL,
+  target_id VARCHAR(100) NULL,
+  detail VARCHAR(500) NOT NULL DEFAULT '',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  KEY idx_audit_created (created_at),
+  KEY idx_audit_user (user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;

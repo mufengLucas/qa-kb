@@ -3,9 +3,11 @@ package com.qa.kb.config;
 import com.qa.kb.auth.AuthService;
 import com.qa.kb.auth.LoginRateLimiter;
 import com.qa.kb.attachment.AttachmentService;
+import com.qa.kb.audit.AuditService;
 import com.qa.kb.backup.BackupService;
 import com.qa.kb.page.PageService;
 import com.qa.kb.persistence.AttachmentMapper;
+import com.qa.kb.persistence.AuditMapper;
 import com.qa.kb.persistence.PageMapper;
 import com.qa.kb.persistence.ProjectMapper;
 import com.qa.kb.persistence.ReportItemMapper;
@@ -21,6 +23,7 @@ import com.qa.kb.report.ReportService;
 import com.qa.kb.search.SearchService;
 import com.qa.kb.space.SpaceService;
 import com.qa.kb.user.UserService;
+import com.qa.kb.web.AuditInterceptor;
 import java.time.Clock;
 import java.time.ZoneId;
 import java.util.Properties;
@@ -32,6 +35,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
  * Wires the framework-free services.
@@ -143,5 +148,22 @@ public class AppConfig {
         backup.getKeep(),
         offsite == null || offsite.isBlank() ? null : java.nio.file.Path.of(offsite),
         clock);
+  }
+
+  @Bean
+  public AuditService auditService(AuditMapper auditMapper) {
+    return new AuditService(auditMapper);
+  }
+
+  /** P2 审计：统一拦 /api/** 写操作（GET 不产生审计）。 */
+  @Bean
+  public WebMvcConfigurer auditWebMvcConfigurer(AuditService auditService) {
+    AuditInterceptor interceptor = new AuditInterceptor(auditService);
+    return new WebMvcConfigurer() {
+      @Override
+      public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(interceptor).addPathPatterns("/api/**");
+      }
+    };
   }
 }

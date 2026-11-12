@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.qa.kb.audit.AuditService;
 import com.qa.kb.auth.AuthService;
 import com.qa.kb.auth.Role;
 import com.qa.kb.common.GlobalExceptionHandler;
@@ -40,13 +41,14 @@ import org.springframework.web.method.support.ModelAndViewContainer;
 class AuthControllerTest {
 
   @Mock private AuthService authService;
+  @Mock private AuditService auditService;
 
   private MockMvc mvc;
 
   @BeforeEach
   void setUp() {
     mvc =
-        MockMvcBuilders.standaloneSetup(new AuthController(authService))
+        MockMvcBuilders.standaloneSetup(new AuthController(authService, auditService))
             .setControllerAdvice(new GlobalExceptionHandler())
             .setCustomArgumentResolvers(new CsrfTokenResolver())
             .build();

@@ -309,6 +309,12 @@
         showNewUser: false,
         backupBusy: false,
         lastBackup: null,
+
+        /* 操作审计（P2 Phase 2） */
+        auditRows: [],
+        auditTotal: 0,
+        auditBusy: false,
+        auditLoaded: false,
       };
     },
 
@@ -380,6 +386,12 @@
       },
       weekStart() {
         this.loadReport();
+      },
+      tab(value) {
+        // 进入成员页且首次可见时懒加载审计
+        if (value === "members" && this.isAdmin && !this.auditLoaded) {
+          this.loadAudit();
+        }
       },
     },
 
@@ -1168,6 +1180,21 @@
           this.fail(error);
         } finally {
           this.backupBusy = false;
+        }
+      },
+
+      /* ---------------------------------------------------------------- 操作审计 */
+      async loadAudit() {
+        this.auditBusy = true;
+        try {
+          const data = await api("GET", "/api/admin/audit?limit=100");
+          this.auditRows = (data && data.items) || [];
+          this.auditTotal = (data && data.total) || 0;
+          this.auditLoaded = true;
+        } catch (error) {
+          this.fail(error);
+        } finally {
+          this.auditBusy = false;
         }
       },
 
