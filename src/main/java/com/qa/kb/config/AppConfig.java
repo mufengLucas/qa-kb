@@ -2,8 +2,10 @@ package com.qa.kb.config;
 
 import com.qa.kb.auth.AuthService;
 import com.qa.kb.auth.LoginRateLimiter;
+import com.qa.kb.attachment.AttachmentService;
 import com.qa.kb.backup.BackupService;
 import com.qa.kb.page.PageService;
+import com.qa.kb.persistence.AttachmentMapper;
 import com.qa.kb.persistence.PageMapper;
 import com.qa.kb.persistence.ProjectMapper;
 import com.qa.kb.persistence.ReportItemMapper;
@@ -96,6 +98,13 @@ public class AppConfig {
       TagMapper tagMapper,
       Clock clock) {
     return new PageService(pageMapper, revisionMapper, spaceMapper, tagMapper, clock);
+  }
+
+  @Bean
+  public AttachmentService attachmentService(
+      AttachmentMapper attachmentMapper, PageMapper pageMapper, KbProperties properties) {
+    return new AttachmentService(
+        attachmentMapper, pageMapper, java.nio.file.Path.of(properties.getUploadDir()));
   }
 
   @Bean

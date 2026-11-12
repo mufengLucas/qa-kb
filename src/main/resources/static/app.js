@@ -143,6 +143,46 @@
     return data;
   }
 
+  /** 附件上传：multipart 请求不能手动设 Content-Type（boundary 由浏览器拼），其余同 api()。 */
+  async function upload(url, file, retried) {
+    const token = await ensureCsrf();
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: token ? { "X-XSRF-TOKEN": token } : {},
+      credentials: "same-origin",
+      body: form,
+    });
+    if (response.status === 403 && !retried) {
+      csrfToken = null;
+      try {
+        await fetchCsrfToken();
+      } catch (ignored) {
+        /* 重试时给出真实错误 */
+      }
+      return upload(url, file, true);
+    }
+    const text = await response.text();
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (ignored) {
+        data = text;
+      }
+    }
+    if (!response.ok) {
+      const message =
+        (data && (data.message || data.error)) || "上传失败（HTTP " + response.status + "）";
+      const error = new Error(message);
+      error.status = response.status;
+      error.payload = data;
+      throw error;
+    }
+    return data;
+  }
+
   function renderMarkdown(source) {
     const text = source || "";
     if (!window.marked) {
@@ -204,6 +244,8 @@
         activePageId: null,
         current: null,
         pageTags: [],
+        pageAttachments: [],
+        attachBusy: false,
         editing: false,
         editor: {
           id: null,
@@ -462,9 +504,12 @@
         this.showRevisions = false;
         this.editing = false;
         this.activePageId = id;
+        this.pageAttachments = [];
         try {
           this.current = await api("GET", "/api/pages/" + id);
           this.pageTags = (await api("GET", "/api/pages/" + id + "/tags")) || [];
+          this.pageAttachments =
+            (await api("GET", "/api/pages/" + id + "/attachments")) || [];
         } catch (error) {
           this.fail(error);
         }
@@ -477,6 +522,51 @@
         await this.openPage(hit.id);
         this.searchQ = "";
         this.hits = [];
+      },
+      async uploadAttachment(event) {
+        const input = event.target;
+        const file = input.files && input.files[0];
+        if (!file || !this.current) {
+          return;
+        }
+        this.attachBusy = true;
+        try {
+          const created = await upload("/api/pages/" + this.current.id + "/attachments", file);
+          if (created) {
+            this.pageAttachments.push(created);
+          }
+          this.toast("附件已上传", "ok");
+          input.value = "";
+        } catch (error) {
+          this.fail(error);
+        } finally {
+          this.attachBusy = false;
+        }
+      },
+      async deleteAttachment(att) {
+        if (!window.confirm("删除附件「" + att.filename + "」？删除后不可恢复")) {
+          return;
+        }
+        this.attachBusy = true;
+        try {
+          await api("DELETE", "/api/attachments/" + att.id);
+          this.pageAttachments = this.pageAttachments.filter((x) => x.id !== att.id);
+          this.toast("附件已删除", "ok");
+        } catch (error) {
+          this.fail(error);
+        } finally {
+          this.attachBusy = false;
+        }
+      },
+      humanSize(bytes) {
+        const n = Number(bytes) || 0;
+        if (n < 1024) {
+          return n + " B";
+        }
+        if (n < 1024 * 1024) {
+          return (n / 1024).toFixed(1) + " KB";
+        }
+        return (n / 1024 / 1024).toFixed(1) + " MB";
       },
       async runSearch(q) {
         this.searchBusy = true;

@@ -340,6 +340,65 @@
               </div>
 
               <article class="card doc" v-html="renderedContent"></article>
+
+              <!-- 附件 -->
+              <section class="card" style="margin-top: 14px">
+                <div class="row" style="margin-bottom: 10px">
+                  <strong>附件</strong>
+                  <span class="sub" style="margin-left: 8px">
+                    {{ pageAttachments.length }} 个文件
+                  </span>
+                  <div class="spacer"></div>
+                  <label
+                    class="btn sm"
+                    style="cursor: pointer"
+                    :style="{ opacity: attachBusy ? 0.6 : 1 }"
+                  >
+                    {{ attachBusy ? '处理中…' : '上传附件' }}
+                    <input
+                      type="file"
+                      style="display: none"
+                      :disabled="attachBusy || !canWrite"
+                      @change="uploadAttachment"
+                    />
+                  </label>
+                </div>
+                <div
+                  v-for="att in pageAttachments"
+                  :key="att.id"
+                  class="row"
+                  style="padding: 6px 0; border-top: 1px solid var(--line)"
+                >
+                  <a
+                    :href="'/api/attachments/' + att.id"
+                    style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap"
+                    :title="att.filename"
+                  >
+                    {{ att.filename }}
+                  </a>
+                  <span class="sub" style="margin-left: 10px; white-space: nowrap">
+                    {{ humanSize(att.size) }}
+                  </span>
+                  <div class="spacer"></div>
+                  <button
+                    class="btn sm ghost"
+                    :disabled="attachBusy"
+                    @click="deleteAttachment(att)"
+                  >
+                    删除
+                  </button>
+                </div>
+                <div v-if="!pageAttachments.length" class="empty small">
+                  还没有附件
+                </div>
+                <div
+                  v-if="canWrite"
+                  class="sub"
+                  style="margin-top: 8px; font-size: 12px"
+                >
+                  单个文件不超过 20MB，删除页面时附件会一并删除
+                </div>
+              </section>
             </div>
 
             <!-- 空状态 -->
