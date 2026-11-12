@@ -15,11 +15,10 @@ import org.apache.ibatis.annotations.Select;
 @Mapper
 public interface ReportMapper {
 
-  @Insert(
-      "INSERT INTO daily_reports (user_id, report_date, done, plan, blockers, status) "
-          + "VALUES (#{userId}, #{date}, #{done}, #{plan}, #{blockers}, #{status}) AS v "
-          + "ON DUPLICATE KEY UPDATE done = v.done, plan = v.plan, blockers = v.blockers, "
-          + "status = v.status, updated_at = CURRENT_TIMESTAMP(3)")
+  /**
+   * 日报/周报幂等保存（按 user+date 唯一键）。MySQL 与 SQLite 语法不同，实现见
+   * {@code mapper/ReportMapper.xml} 中按 {@code databaseId} 分流的两套 SQL。
+   */
   int upsert(
       @Param("userId") long userId,
       @Param("date") LocalDate date,
@@ -61,9 +60,16 @@ public interface ReportMapper {
           + "(SELECT r.user_id FROM daily_reports r WHERE r.report_date = #{date}) ORDER BY u.id")
   List<Long> missingUserIds(@Param("date") LocalDate date);
 
+  /**
+   * 周报关联的项目 id（读取端过滤已软删除项目）。
+   *
+   * <p>软删除项目的关联在界面上不显示、也无法取消勾选；若把它们回传给前端再随保存提交，
+   * 会被 {@code knownProjects} 拒绝（400）。因此读取时只回有效项目，保存后旧链接自然被清掉。
+   */
   @Select(
       "SELECT rp.project_id FROM daily_report_projects rp "
           + "JOIN daily_reports r ON r.id = rp.report_id "
+          + "JOIN projects p ON p.id = rp.project_id AND p.deleted_at IS NULL "
           + "WHERE r.user_id = #{userId} AND r.report_date = #{date}")
   List<Long> listProjectIds(@Param("userId") long userId, @Param("date") LocalDate date);
 
@@ -103,8 +109,9 @@ public interface ReportMapper {
   @Delete("DELETE FROM daily_report_projects WHERE report_id = #{reportId}")
   int deleteProjectLinks(@Param("reportId") long reportId);
 
-  @Insert(
-      "INSERT IGNORE INTO daily_report_projects (report_id, project_id) "
-          + "VALUES (#{reportId}, #{projectId})")
+  /**
+   * 周报/日报关联项目（按 report_id+project_id 唯一键去重）。MySQL 的 {@code INSERT IGNORE}
+   * 与 SQLite 的 {@code INSERT OR IGNORE} 语法不同，实现见 {@code mapper/ReportMapper.xml}。
+   */
   int insertProjectLink(@Param("reportId") long reportId, @Param("projectId") long projectId);
 }

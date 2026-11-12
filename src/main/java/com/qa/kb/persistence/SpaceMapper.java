@@ -45,6 +45,17 @@ public interface SpaceMapper {
       @Param("description") String description,
       @Param("sort") int sort);
 
+  /**
+   * 先摘掉空间内的全部页面。
+   *
+   * <p>MySQL 中 {@code fk_pages_space … ON DELETE CASCADE} 与 {@code fk_pages_parent … ON DELETE
+   * SET NULL} 同时作用于 {@code pages}：直接删空间行会级联删页面，再对兄弟页面执行 SET NULL，
+   * 而该更新会重新校验已被删除的空间行 → ERROR 1452（对外表现为 409）。先删页面后，删空间行不再
+   * 触发任何对 pages 的更新，两条 SQL 在同一事务内等价于原级联语义。
+   */
+  @Delete("DELETE FROM pages WHERE space_id = #{id}")
+  int deletePagesBySpace(@Param("id") long id);
+
   @Delete("DELETE FROM spaces WHERE id = #{id}")
   int delete(@Param("id") long id);
 }

@@ -81,6 +81,9 @@ public class SpaceService {
   @Transactional
   public void delete(long id) {
     get(id);
+    // 顺序不可调换：先删页面再删空间行，规避 MySQL 级联与 SET NULL 互相干扰的 ERROR 1452
+    // （含嵌套子页面的空间直接删空间行会 409，见 SpaceMapper.deletePagesBySpace 注释）。
+    spaceMapper.deletePagesBySpace(id);
     spaceMapper.delete(id);
   }
 

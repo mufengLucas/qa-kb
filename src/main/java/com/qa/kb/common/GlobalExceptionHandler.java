@@ -58,6 +58,8 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(DataIntegrityViolationException.class)
   public ResponseEntity<ApiError> handleDuplicate(DataIntegrityViolationException ex) {
+    // 409 此前完全静默，排查成本极高（空间删除 1452 即因此难以定位）：必须留下完整上下文
+    log.warn("Data integrity violation: {}", ex.getMessage(), ex);
     return ResponseEntity.status(HttpStatus.CONFLICT)
         .body(ApiError.of("conflict", "数据冲突，请检查是否重复"));
   }

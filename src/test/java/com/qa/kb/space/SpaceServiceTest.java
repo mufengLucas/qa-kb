@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
@@ -137,12 +139,25 @@ class SpaceServiceTest {
   }
 
   @Test
+  void deleteRemovesPagesBeforeSpaceRow() {
+    when(spaceMapper.findById(1L)).thenReturn(Optional.of(space(1, "qa")));
+
+    service.delete(1L);
+
+    // 顺序不可调换：先清页面（含嵌套子页）再删空间行，规避 MySQL ERROR 1452
+    InOrder order = inOrder(spaceMapper);
+    order.verify(spaceMapper).deletePagesBySpace(1L);
+    order.verify(spaceMapper).delete(1L);
+  }
+
+  @Test
   void deleteRejectsUnknownSpace() {
     when(spaceMapper.findById(9L)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.delete(9L))
         .isInstanceOf(ApiException.class)
         .satisfies(ex -> assertThat(((ApiException) ex).status()).isEqualTo(HttpStatus.NOT_FOUND));
+    verify(spaceMapper, never()).deletePagesBySpace(anyLong());
     verify(spaceMapper, never()).delete(anyLong());
   }
 

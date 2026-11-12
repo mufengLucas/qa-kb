@@ -179,9 +179,10 @@ class ReportServiceTest {
   void saveDailyRejectsUnknownProject() {
     when(projectMapper.findById(5L)).thenReturn(Optional.empty());
 
+    // 校验失效/不存在项目统一 400（请求数据无效），且在 upsert 之前拦截
     assertThatThrownBy(() -> service.saveDaily(1L, TODAY, "d", "p", "b", null, List.of(5L)))
         .isInstanceOf(ApiException.class)
-        .satisfies(ex -> assertThat(((ApiException) ex).status()).isEqualTo(HttpStatus.NOT_FOUND));
+        .satisfies(ex -> assertThat(((ApiException) ex).status()).isEqualTo(HttpStatus.BAD_REQUEST));
     verify(reportMapper, never()).upsert(anyLong(), any(), any(), any(), any(), any());
   }
 
@@ -386,6 +387,52 @@ class ReportServiceTest {
     inOrder.verify(reportMapper).upsert(1L, MONDAY, "本周完成", "下周计划", "", "submitted");
     inOrder.verify(reportMapper).deleteProjectLinks(77L);
     inOrder.verify(reportMapper).insertProjectLink(77L, 3L);
+  }
+
+  @Test
+  void saveWeeklyRejectsDeletedProjectAndAsksUserToRefresh() {
+    when(projectMapper.findById(5L)).thenReturn(Optional.empty());
+    when(projectMapper.findDeletedById(5L)).thenReturn(Optional.of(project(5)));
+
+    assertThatThrownBy(() -> service.saveWeekly(1L, MONDAY, "d", "p", "b", "draft", List.of(5L)))
+        .isInstanceOf(ApiException.class)
+        .satisfies(
+            ex -> {
+              assertThat(((ApiException) ex).status()).isEqualTo(HttpStatus.BAD_REQUEST);
+              assertThat(ex.getMessage()).contains("已删除").contains("刷新");
+            });
+    verify(reportMapper, never()).upsert(anyLong(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void saveWeeklyRejectsNeverExistingProjectWithBadRequest() {
+    when(projectMapper.findById(404L)).thenReturn(Optional.empty());
+    when(projectMapper.findDeletedById(404L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () -> service.saveWeekly(1L, MONDAY, "d", "p", "b", "draft", List.of(404L)))
+        .isInstanceOf(ApiException.class)
+        .satisfies(
+            ex -> {
+              assertThat(((ApiException) ex).status()).isEqualTo(HttpStatus.BAD_REQUEST);
+              assertThat(ex.getMessage()).contains("不存在");
+            });
+    verify(reportMapper, never()).upsert(anyLong(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void saveWeeklyRejectsWholeSaveWhenAnyLinkIsStale() {
+    when(projectMapper.findById(1L)).thenReturn(Optional.of(project(1L)));
+    when(projectMapper.findById(5L)).thenReturn(Optional.empty());
+    when(projectMapper.findDeletedById(5L)).thenReturn(Optional.of(project(5)));
+
+    // 混合关联：只要有一项失效，整次保存回滚（不落半截数据）
+    assertThatThrownBy(
+            () -> service.saveWeekly(1L, MONDAY, "d", "p", "b", "submitted", List.of(1L, 5L)))
+        .isInstanceOf(ApiException.class)
+        .satisfies(ex -> assertThat(((ApiException) ex).status()).isEqualTo(HttpStatus.BAD_REQUEST));
+    verify(reportMapper, never()).upsert(anyLong(), any(), any(), any(), any(), any());
+    verify(reportMapper, never()).insertProjectLink(anyLong(), anyLong());
   }
 
   // ---------- 清单读取 ----------

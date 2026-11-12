@@ -351,9 +351,16 @@ public class ReportService {
       if (projectId == null || !unique.add(projectId)) {
         continue;
       }
-      projectMapper
-          .findById(projectId)
-          .orElseThrow(() -> ApiException.notFound("项目不存在: " + projectId));
+      if (projectMapper.findById(projectId).isPresent()) {
+        continue;
+      }
+      // 已软删除的项目在勾选列表里不显示、用户无法自行取消 → 明确 400 而非 404，
+      // 提示刷新后重新提交（读取端已过滤，刷新后该残留关联不再出现）。
+      if (projectMapper.findDeletedById(projectId).isPresent()) {
+        throw ApiException.badRequest(
+            "关联项目已删除: " + projectId + "，请刷新页面后重新提交（失效关联会随之清除）");
+      }
+      throw ApiException.badRequest("关联项目不存在: " + projectId);
     }
     return List.copyOf(unique);
   }

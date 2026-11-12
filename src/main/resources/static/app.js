@@ -739,6 +739,16 @@
       },
       async saveReport(status) {
         this.report.status = status || this.report.status || "draft";
+        // 提交前剪枝：剔除已删除/不存在的项目关联，避免后端 400（服务端对失效关联同样拦截）
+        const aliveIds = new Set((this.projects || []).map((p) => p.id));
+        const projectIds = aliveIds.size
+          ? this.linkedProjectIds.filter((id) => aliveIds.has(id))
+          : this.linkedProjectIds;
+        const dropped = this.linkedProjectIds.length - projectIds.length;
+        if (dropped > 0) {
+          this.linkedProjectIds = projectIds;
+          this.toast("已清除 " + dropped + " 项失效的项目关联", "ok");
+        }
         this.reportBusy = true;
         try {
           await api("PUT", "/api/reports/weekly/" + this.weekStart, {
@@ -746,7 +756,7 @@
             plan: this.report.plan || "",
             blockers: this.report.blockers || "",
             status: this.report.status,
-            projectIds: this.linkedProjectIds,
+            projectIds: projectIds,
           });
           this.toast(this.report.status === "submitted" ? "周报已提交" : "草稿已保存", "ok");
           await this.loadReport();
