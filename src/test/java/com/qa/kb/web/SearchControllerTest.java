@@ -24,13 +24,14 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class SearchControllerTest {
 
   @Mock private SearchService searchService;
+  @Mock private com.qa.kb.space.SpaceAccessService access;
 
   private MockMvc mvc;
 
   @BeforeEach
   void setUp() {
     mvc =
-        MockMvcBuilders.standaloneSetup(new SearchController(searchService))
+        MockMvcBuilders.standaloneSetup(new SearchController(searchService, access))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
   }

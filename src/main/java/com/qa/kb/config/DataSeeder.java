@@ -88,8 +88,10 @@ public class DataSeeder implements ApplicationRunner {
     UserService.UserView bob = userService.create("bob", "鲍勃", seed.getDemoPassword(), "MEMBER");
     userService.create("viewer", "访客", seed.getDemoPassword(), "VIEWER");
 
-    SpaceRow standards = spaceService.create("测试规范", "qa-standards", "📘", "团队测试流程与规范", 1);
-    SpaceRow apiDocs = spaceService.create("接口文档", "api-docs", "🔌", "接口契约与用例", 2);
+    SpaceRow standards =
+        spaceService.create("测试规范", "qa-standards", "📘", "团队测试流程与规范", 1, false, null);
+    SpaceRow apiDocs =
+        spaceService.create("接口文档", "api-docs", "🔌", "接口契约与用例", 2, false, null);
 
     PageRow loginGuide =
         pageService.create(

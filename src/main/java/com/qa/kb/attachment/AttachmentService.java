@@ -117,6 +117,14 @@ public class AttachmentService {
   /** 下载所需的元数据与文件路径。 */
   public record Download(AttachmentRow row, Path path) {}
 
+  /** 删除/下载前权限校验用：取附件所属页面编号（附件不存在 → 404，不触碰磁盘）。 */
+  public long pageIdOf(long attachmentId) {
+    return attachmentMapper
+        .findById(attachmentId)
+        .orElseThrow(() -> ApiException.notFound("附件不存在"))
+        .pageId();
+  }
+
   private Path pathOf(String storedName) {
     Path path = uploadDir.resolve(storedName).normalize();
     if (!path.getParent().equals(uploadDir)) {

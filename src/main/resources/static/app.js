@@ -262,7 +262,12 @@
         showSpaceForm: false,
         showSpaceManage: false,
         spaceBusy: false,
-        spaceForm: { name: "", slug: "" },
+        spaceForm: { name: "", slug: "", restricted: false },
+        /* 空间成员管理（P2 Phase 3） */
+        membersSpaceId: null,
+        spaceMembers: [],
+        memberBusy: false,
+        newMember: { userId: null, role: "MEMBER" },
         searchQ: "",
         hits: [],
         searchBusy: false,
@@ -331,6 +336,16 @@
       currentSpace() {
         const id = this.spaceId;
         return this.spaces.find((s) => s.id === id) || null;
+      },
+      membersSpaceName() {
+        const id = this.membersSpaceId;
+        const found = this.spaces.find((s) => s.id === id);
+        return found ? found.name : "";
+      },
+      /** 添加成员下拉：排除已在名单里的 */
+      memberOptions() {
+        const ids = new Set((this.spaceMembers || []).map((m) => m.userId));
+        return (this.members || []).filter((u) => !ids.has(u.id));
       },
       renderedContent() {
         return this.current ? renderMarkdown(this.current.contentMd) : "";
@@ -740,13 +755,18 @@
             icon: "",
             description: "",
             sort: this.spaces.length,
+            restricted: !!this.spaceForm.restricted,
           });
-          this.spaceForm = { name: "", slug: "" };
+          const wasRestricted = !!this.spaceForm.restricted;
+          this.spaceForm = { name: "", slug: "", restricted: false };
           this.showSpaceForm = false;
           await this.loadSpaces();
           this.spaceId = created.id;
           await this.loadTree();
-          this.toast("空间已创建", "ok");
+          this.toast(
+            wasRestricted ? "受限空间已创建，你已成为空间管理员" : "空间已创建",
+            "ok"
+          );
         } catch (error) {
           this.fail(error);
         }
@@ -783,6 +803,133 @@
           this.fail(error);
         } finally {
           this.spaceBusy = false;
+        }
+      },
+
+      /** 受限开关（P2 Phase 3）：PUT /api/spaces/{id} 需空间管理员；restricted 显式传值。 */
+      async toggleRestricted(space) {
+        if (!space || this.spaceBusy) {
+          return;
+        }
+        const next = !space.restricted;
+        if (
+          next &&
+          !window.confirm(
+            "将《" +
+              space.name +
+              "》设为受限空间？设置后仅空间成员与管理员可见（非成员的列表/搜索/回收站都不再出现）。"
+          )
+        ) {
+          return;
+        }
+        this.spaceBusy = true;
+        try {
+          await api("PUT", "/api/spaces/" + space.id, {
+            name: space.name,
+            icon: space.icon || "",
+            description: space.description || "",
+            sort: space.sort || 0,
+            restricted: next,
+          });
+          await this.loadSpaces();
+          this.toast(next ? "已设为受限空间" : "已设为开放空间", "ok");
+        } catch (error) {
+          this.fail(error);
+        } finally {
+          this.spaceBusy = false;
+        }
+      },
+
+      /* -------------------------------------------- 空间成员（P2 Phase 3） */
+      async toggleMembers(space) {
+        if (!space) {
+          return;
+        }
+        if (this.membersSpaceId === space.id) {
+          this.membersSpaceId = null;
+          return;
+        }
+        this.membersSpaceId = space.id;
+        this.newMember = { userId: null, role: "MEMBER" };
+        await this.loadSpaceMembers(space.id);
+      },
+      async loadSpaceMembers(spaceId) {
+        try {
+          this.spaceMembers =
+            (await api("GET", "/api/spaces/" + spaceId + "/members")) || [];
+          if (!this.members.length) {
+            // 成员下拉的数据源：登录即可读的成员目录（/api/members）
+            await this.loadMembers();
+          }
+        } catch (error) {
+          this.fail(error);
+        }
+      },
+      async addSpaceMember() {
+        if (!this.membersSpaceId || this.memberBusy) {
+          return;
+        }
+        if (!this.newMember.userId) {
+          this.toast("请选择要添加的成员", "error");
+          return;
+        }
+        this.memberBusy = true;
+        try {
+          await api("POST", "/api/spaces/" + this.membersSpaceId + "/members", {
+            userId: this.newMember.userId,
+            role: this.newMember.role,
+          });
+          this.newMember = { userId: null, role: "MEMBER" };
+          await this.loadSpaceMembers(this.membersSpaceId);
+          this.toast("成员已添加", "ok");
+        } catch (error) {
+          this.fail(error);
+        } finally {
+          this.memberBusy = false;
+        }
+      },
+      /** 改角色：下拉 change 即 upsert；失败回读还原下拉值。 */
+      async changeMemberRole(member) {
+        if (!this.membersSpaceId || this.memberBusy) {
+          return;
+        }
+        this.memberBusy = true;
+        try {
+          await api("POST", "/api/spaces/" + this.membersSpaceId + "/members", {
+            userId: member.userId,
+            role: member.role,
+          });
+          this.toast("空间角色已更新", "ok");
+        } catch (error) {
+          this.fail(error);
+          await this.loadSpaceMembers(this.membersSpaceId);
+        } finally {
+          this.memberBusy = false;
+        }
+      },
+      async removeSpaceMember(member) {
+        if (!this.membersSpaceId || this.memberBusy) {
+          return;
+        }
+        if (
+          !window.confirm(
+            "将 " + (member.name || member.login) + " 移出该空间？（不影响其全局角色）"
+          )
+        ) {
+          return;
+        }
+        this.memberBusy = true;
+        try {
+          await api(
+            "DELETE",
+            "/api/spaces/" + this.membersSpaceId + "/members/" + member.userId
+          );
+          await this.loadSpaceMembers(this.membersSpaceId);
+          this.toast("已移出空间", "ok");
+        } catch (error) {
+          this.fail(error);
+        } finally {
+          this.memberBusy = false;
         }
       },
 

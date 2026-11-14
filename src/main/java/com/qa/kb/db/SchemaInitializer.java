@@ -42,6 +42,7 @@ public class SchemaInitializer implements ApplicationRunner {
       if (mysql) {
         SqlScriptRunner.run(connection, "/db/migration/V1__init.sql");
         ensureColumn(connection, "projects", "deleted_at", "DATETIME(3) NULL", true);
+        ensureColumn(connection, "spaces", "restricted", "TINYINT(1) NOT NULL DEFAULT 0", true);
         log.info("MySQL schema ready");
       } else {
         try (Statement st = connection.createStatement()) {
@@ -51,6 +52,7 @@ public class SchemaInitializer implements ApplicationRunner {
         }
         SqlScriptRunner.run(connection, "/db/schema.sql");
         ensureColumn(connection, "projects", "deleted_at", "TEXT", false);
+        ensureColumn(connection, "spaces", "restricted", "INTEGER NOT NULL DEFAULT 0", false);
         log.info("SQLite schema ready");
       }
     }

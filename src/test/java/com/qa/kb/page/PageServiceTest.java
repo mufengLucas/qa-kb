@@ -87,7 +87,7 @@ class PageServiceTest {
 
   @Test
   void createRejectsParentFromAnotherSpace() {
-    when(spaceMapper.findById(1L)).thenReturn(Optional.of(new SpaceRow(1L, "S", "s", "", "", 0)));
+    when(spaceMapper.findById(1L)).thenReturn(Optional.of(new SpaceRow(1L, "S", "s", "", "", 0, false)));
     when(pageMapper.findById(5L)).thenReturn(Optional.of(page(5, 2, null, "Other")));
 
     assertThatThrownBy(() -> service.create(1, 5L, "Title", "x", "PUBLISHED", 1L))
@@ -97,7 +97,7 @@ class PageServiceTest {
 
   @Test
   void createInsertsPageAndInitialRevision() {
-    when(spaceMapper.findById(1L)).thenReturn(Optional.of(new SpaceRow(1L, "S", "s", "", "", 0)));
+    when(spaceMapper.findById(1L)).thenReturn(Optional.of(new SpaceRow(1L, "S", "s", "", "", 0, false)));
     when(pageMapper.insert(1L, null, "登录接口", "page", "内容", "PUBLISHED", 7L, 0))
         .thenReturn(1);
     when(pageMapper.lastInsertId()).thenReturn(42L);
@@ -111,7 +111,7 @@ class PageServiceTest {
 
   @Test
   void createDefaultsStatusToPublishedAndContentToEmpty() {
-    when(spaceMapper.findById(1L)).thenReturn(Optional.of(new SpaceRow(1L, "S", "s", "", "", 0)));
+    when(spaceMapper.findById(1L)).thenReturn(Optional.of(new SpaceRow(1L, "S", "s", "", "", 0, false)));
     when(pageMapper.insert(eq(1L), eq(null), eq("T"), eq("t"), eq(""), eq("PUBLISHED"), eq(1L), eq(0)))
         .thenReturn(1);
     when(pageMapper.lastInsertId()).thenReturn(2L);
@@ -124,7 +124,7 @@ class PageServiceTest {
 
   @Test
   void createRejectsUnknownParent() {
-    when(spaceMapper.findById(1L)).thenReturn(Optional.of(new SpaceRow(1L, "S", "s", "", "", 0)));
+    when(spaceMapper.findById(1L)).thenReturn(Optional.of(new SpaceRow(1L, "S", "s", "", "", 0, false)));
     when(pageMapper.findById(9L)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.create(1, 9L, "T", "x", "PUBLISHED", 1L))
@@ -280,9 +280,18 @@ class PageServiceTest {
   }
 
   @Test
-  void allTagsAreReadThroughTheMapper() {
-    when(tagMapper.listAll()).thenReturn(List.of(new TagCount("api", 3L)));
+  void allTagsAreScopedToVisibleSpaces() {
+    when(tagMapper.listAllInSpaces(java.util.Set.of(1L)))
+        .thenReturn(List.of(new TagCount("api", 3L)));
 
-    assertThat(service.allTags()).extracting(TagCount::name).containsExactly("api");
+    assertThat(service.allTags(java.util.Set.of(1L)))
+        .extracting(TagCount::name)
+        .containsExactly("api");
+  }
+
+  @Test
+  void allTagsShortCircuitsOnEmptySpaceSet() {
+    assertThat(service.allTags(java.util.Set.of())).isEmpty();
+    verify(tagMapper, never()).listAllInSpaces(any());
   }
 }

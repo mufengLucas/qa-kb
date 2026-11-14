@@ -41,7 +41,17 @@ CREATE TABLE IF NOT EXISTS spaces (
   icon        TEXT    NOT NULL DEFAULT '',
   description TEXT    NOT NULL DEFAULT '',
   sort        INTEGER NOT NULL DEFAULT 0,
+  restricted  INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+);
+--> statement-breakpoint
+
+CREATE TABLE IF NOT EXISTS space_members (
+  space_id   INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role       TEXT    NOT NULL DEFAULT 'MEMBER' CHECK (role IN ('ADMIN','MEMBER','VIEWER')),
+  created_at TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
+  PRIMARY KEY (space_id, user_id)
 );
 --> statement-breakpoint
 

@@ -4,6 +4,7 @@ import com.qa.kb.attachment.AttachmentService;
 import com.qa.kb.model.AttachmentRow;
 import com.qa.kb.security.CurrentUser;
 import com.qa.kb.security.SessionUser;
+import com.qa.kb.space.SpaceAccessService;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -27,17 +28,20 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * 页面附件：上传 / 列表 / 下载 / 删除。
  *
- * <p>权限由 SecurityConfig 统一收口——读需登录，写操作需 ADMIN/MEMBER（与空间/页面同一模型，
- * 不校验归属人）。下载走控制器流式输出，存储目录不在 static 下，不暴露为静态资源。
+ * <p>权限由 SecurityConfig 粗粒度收口（读需登录，写需 ADMIN/MEMBER），P2 Phase 3 起再按页面
+ * 归属空间做细粒度判定（{@link SpaceAccessService}：受限空间非成员 403）。存储目录不在 static
+ * 下，不暴露为静态资源；下载走控制器流式输出。
  */
 @RestController
 @RequestMapping("/api")
 public class AttachmentController {
 
   private final AttachmentService attachmentService;
+  private final SpaceAccessService access;
 
-  public AttachmentController(AttachmentService attachmentService) {
+  public AttachmentController(AttachmentService attachmentService, SpaceAccessService access) {
     this.attachmentService = attachmentService;
+    this.access = access;
   }
 
   @PostMapping("/pages/{pageId}/attachments")
@@ -45,6 +49,7 @@ public class AttachmentController {
       @PathVariable long pageId, @RequestParam("file") MultipartFile file,
       Authentication authentication) throws IOException {
     SessionUser user = CurrentUser.require(authentication);
+    access.checkPageWrite(user, pageId);
     AttachmentRow created =
         attachmentService.save(
             pageId,
@@ -56,15 +61,20 @@ public class AttachmentController {
   }
 
   @GetMapping("/pages/{pageId}/attachments")
-  public List<AttachmentRow> list(@PathVariable long pageId) {
+  public List<AttachmentRow> list(
+      @PathVariable long pageId, Authentication authentication) {
+    access.checkPageRead(CurrentUser.require(authentication), pageId);
     return attachmentService.list(pageId);
   }
 
   /** 下载：RFC 5987 编码文件名，中文名在各浏览器均可正确落地。 */
   @GetMapping("/attachments/{id}")
-  public ResponseEntity<Resource> download(@PathVariable long id) throws IOException {
+  public ResponseEntity<Resource> download(
+      @PathVariable long id, Authentication authentication) throws IOException {
+    SessionUser user = CurrentUser.require(authentication);
     AttachmentService.Download download = attachmentService.open(id);
     AttachmentRow row = download.row();
+    access.checkPageRead(user, row.pageId());
     MediaType mediaType =
         row.mime() == null || row.mime().isBlank()
             ? MediaType.APPLICATION_OCTET_STREAM
@@ -82,7 +92,10 @@ public class AttachmentController {
   }
 
   @DeleteMapping("/attachments/{id}")
-  public ResponseEntity<Void> delete(@PathVariable long id) {
+  public ResponseEntity<Void> delete(
+      @PathVariable long id, Authentication authentication) {
+    SessionUser user = CurrentUser.require(authentication);
+    access.checkPageWrite(user, attachmentService.pageIdOf(id));
     attachmentService.delete(id);
     return ResponseEntity.noContent().build();
   }

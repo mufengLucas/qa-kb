@@ -1,9 +1,11 @@
 package com.qa.kb.config;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -119,10 +121,10 @@ class DataSeederTest {
     when(userService.create("viewer", "访客", "change-me-demo-1", "VIEWER"))
         .thenReturn(userView(4, "viewer"));
 
-    when(spaceService.create(eq("测试规范"), eq("qa-standards"), anyString(), anyString(), eq(1)))
-        .thenReturn(new SpaceRow(10L, "测试规范", "qa-standards", "", "", 1));
-    when(spaceService.create(eq("接口文档"), eq("api-docs"), anyString(), anyString(), eq(2)))
-        .thenReturn(new SpaceRow(11L, "接口文档", "api-docs", "", "", 2));
+    when(spaceService.create(eq("测试规范"), eq("qa-standards"), anyString(), anyString(), eq(1), eq(false), isNull()))
+        .thenReturn(new SpaceRow(10L, "测试规范", "qa-standards", "", "", 1, false));
+    when(spaceService.create(eq("接口文档"), eq("api-docs"), anyString(), anyString(), eq(2), eq(false), isNull()))
+        .thenReturn(new SpaceRow(11L, "接口文档", "api-docs", "", "", 2, false));
 
     when(pageService.create(anyLong(), any(), anyString(), anyString(), anyString(), anyLong()))
         .thenReturn(page(20), page(21), page(22));
@@ -137,7 +139,15 @@ class DataSeederTest {
     seeder.run(null);
 
     verify(userService, times(4)).create(anyString(), anyString(), anyString(), anyString());
-    verify(spaceService, times(2)).create(anyString(), anyString(), anyString(), anyString(), org.mockito.ArgumentMatchers.anyInt());
+    verify(spaceService, times(2))
+        .create(
+            anyString(),
+            anyString(),
+            anyString(),
+            anyString(),
+            org.mockito.ArgumentMatchers.anyInt(),
+            anyBoolean(),
+            isNull());
     verify(pageService, times(3))
         .create(anyLong(), any(), anyString(), anyString(), anyString(), anyLong());
     verify(pageService).setTags(eq(20L), eq(java.util.List.of("规范", "登录")));

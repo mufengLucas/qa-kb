@@ -21,10 +21,12 @@ import com.qa.kb.common.GlobalExceptionHandler;
 import com.qa.kb.model.PageRow;
 import com.qa.kb.model.PageSummary;
 import com.qa.kb.model.RevisionRow;
+import com.qa.kb.model.SpaceMemberRow;
 import com.qa.kb.model.SpaceRow;
 import com.qa.kb.model.TagCount;
 import com.qa.kb.page.PageService;
 import com.qa.kb.page.PageTreeBuilder;
+import com.qa.kb.space.SpaceAccessService;
 import com.qa.kb.space.SpaceService;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -44,13 +46,14 @@ class PageControllerTest {
 
   @Mock private SpaceService spaceService;
   @Mock private PageService pageService;
+  @Mock private SpaceAccessService access;
 
   private MockMvc mvc;
 
   @BeforeEach
   void setUp() {
     mvc =
-        MockMvcBuilders.standaloneSetup(new PageController(spaceService, pageService))
+        MockMvcBuilders.standaloneSetup(new PageController(spaceService, pageService, access))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
   }
@@ -62,7 +65,7 @@ class PageControllerTest {
   }
 
   private static SpaceRow space(long id) {
-    return new SpaceRow(id, "空间", "qa", "", "", 0);
+    return new SpaceRow(id, "空间", "qa", "", "", 0, false);
   }
 
   @Test
@@ -194,6 +197,8 @@ class PageControllerTest {
   @Test
   void trashListsDeletedPages() throws Exception {
     when(pageService.trash()).thenReturn(List.of(page(11, "已删除")));
+    when(access.filterReadablePages(any(), org.mockito.ArgumentMatchers.anyList()))
+        .thenAnswer(invocation -> invocation.getArgument(1));
 
     mvc.perform(get("/api/pages/trash").principal(TestAuth.MEMBER))
         .andExpect(status().isOk())
@@ -201,8 +206,19 @@ class PageControllerTest {
   }
 
   @Test
+  void spacesAreFilteredByReadableSet() throws Exception {
+    when(spaceService.list()).thenReturn(List.of(space(1)));
+    when(access.filterReadable(any(), org.mockito.ArgumentMatchers.anyList()))
+        .thenAnswer(invocation -> invocation.getArgument(1));
+
+    mvc.perform(get("/api/spaces").principal(TestAuth.MEMBER))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].id").value(1));
+  }
+
+  @Test
   void createSpaceReturnsCreated() throws Exception {
-    when(spaceService.create("QA", "qa", null, null, 0)).thenReturn(space(1));
+    when(spaceService.create("QA", "qa", null, null, 0, false, 1L)).thenReturn(space(1));
 
     mvc.perform(
             post("/api/spaces")
@@ -211,6 +227,71 @@ class PageControllerTest {
                 .content("{\"name\":\"QA\",\"slug\":\"qa\"}"))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.slug").value("qa"));
+  }
+
+  @Test
+  void createRestrictedSpacePassesTheFlagAndOwner() throws Exception {
+    SpaceRow restricted =
+        new SpaceRow(2L, "机密", "secret", "", "", 0, true);
+    when(spaceService.create("机密", "secret", null, null, 0, true, 1L)).thenReturn(restricted);
+
+    mvc.perform(
+            post("/api/spaces")
+                .principal(TestAuth.ADMIN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"机密\",\"slug\":\"secret\",\"restricted\":true}"))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.restricted").value(true));
+  }
+
+  @Test
+  void spaceMembersListRequiresReadPermission() throws Exception {
+    when(spaceService.get(1L)).thenReturn(space(1));
+    when(spaceService.listMembers(1L))
+        .thenReturn(List.of(new SpaceMemberRow(1L, 2L, "alice", "爱丽丝", "MEMBER")));
+
+    mvc.perform(get("/api/spaces/1/members").principal(TestAuth.MEMBER))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].login").value("alice"));
+  }
+
+  @Test
+  void upsertSpaceMemberReturnsCreated() throws Exception {
+    when(spaceService.get(1L)).thenReturn(space(1));
+    when(spaceService.upsertMember(1L, 3L, "VIEWER"))
+        .thenReturn(new SpaceMemberRow(1L, 3L, "guest", "访客", "VIEWER"));
+
+    mvc.perform(
+            post("/api/spaces/1/members")
+                .principal(TestAuth.ADMIN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"userId\":3,\"role\":\"VIEWER\"}"))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.role").value("VIEWER"));
+  }
+
+  @Test
+  void removeSpaceMemberReturnsNoContent() throws Exception {
+    when(spaceService.get(1L)).thenReturn(space(1));
+
+    mvc.perform(delete("/api/spaces/1/members/3").principal(TestAuth.ADMIN))
+        .andExpect(status().isNoContent());
+
+    verify(spaceService).removeMember(1L, 3L);
+  }
+
+  @Test
+  void spaceMemberRequestValidationRejectsBlankRole() throws Exception {
+    mvc.perform(
+            post("/api/spaces/1/members")
+                .principal(TestAuth.ADMIN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"userId\":3,\"role\":\" \"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("validation_failed"));
+
+    verify(spaceService, never())
+        .upsertMember(anyLong(), anyLong(), any());
   }
 
   @Test

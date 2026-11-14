@@ -132,13 +132,20 @@
                   placeholder="标识（可留空自动生成）"
                   style="margin-bottom: 6px"
                 />
+                <label
+                  class="row small"
+                  style="margin-bottom: 6px; gap: 6px; align-items: center; cursor: pointer"
+                >
+                  <input type="checkbox" v-model="spaceForm.restricted" style="width: auto" />
+                  <span>受限空间：仅成员与管理员可见（你将自动成为空间管理员）</span>
+                </label>
                 <div class="row">
                   <button class="btn sm primary" @click="createSpace">创建</button>
                   <button class="btn sm ghost" @click="showSpaceForm = false">取消</button>
                 </div>
               </div>
 
-              <!-- 空间管理：删除下拉列表中的空间（硬删除） -->
+              <!-- 空间管理：删除 / 受限开关 / 成员管理（P2 Phase 3） -->
               <div v-if="showSpaceManage" style="margin-top: 10px">
                 <div class="muted small" style="margin-bottom: 6px">
                   删除空间会连带永久删除其中全部页面（与页面回收站不同，不可恢复）
@@ -148,11 +155,26 @@
                   v-for="space in spaces"
                   :key="space.id"
                   class="row"
-                  style="margin-bottom: 6px"
+                  style="margin-bottom: 6px; gap: 6px"
                 >
                   <span style="flex: 1; overflow: hidden; text-overflow: ellipsis">
                     {{ space.name }}
+                    <span v-if="space.restricted" class="muted small">（受限）</span>
                   </span>
+                  <button
+                    class="btn sm ghost"
+                    :disabled="spaceBusy"
+                    @click="toggleMembers(space)"
+                  >
+                    {{ membersSpaceId === space.id ? "收起成员" : "成员" }}
+                  </button>
+                  <button
+                    class="btn sm ghost"
+                    :disabled="spaceBusy"
+                    @click="toggleRestricted(space)"
+                  >
+                    {{ space.restricted ? "设为开放" : "设为受限" }}
+                  </button>
                   <button
                     class="btn sm ghost"
                     :disabled="spaceBusy"
@@ -161,7 +183,67 @@
                     删除
                   </button>
                 </div>
-                <div class="row">
+
+                <!-- 成员管理面板：有成员记录按空间角色，无记录回退全局角色 -->
+                <div v-if="membersSpaceId" style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(128, 128, 128, 0.4)">
+                  <div class="row" style="margin-bottom: 6px; gap: 6px">
+                    <strong class="small" style="flex: 1">成员管理 · {{ membersSpaceName }}</strong>
+                    <button class="btn sm ghost" @click="membersSpaceId = null">收起</button>
+                  </div>
+                  <div v-if="!spaceMembers.length" class="muted small" style="margin-bottom: 6px">
+                    暂无空间成员：无成员记录的用户按全局角色判定（受限空间仍需加入才可见）
+                  </div>
+                  <div
+                    v-for="m in spaceMembers"
+                    :key="m.userId"
+                    class="row"
+                    style="margin-bottom: 6px; gap: 6px"
+                  >
+                    <span style="flex: 1; overflow: hidden; text-overflow: ellipsis">
+                      {{ m.name }}（{{ m.login }}）
+                    </span>
+                    <select
+                      class="input"
+                      style="width: auto"
+                      v-model="m.role"
+                      :disabled="memberBusy"
+                      @change="changeMemberRole(m)"
+                    >
+                      <option value="ADMIN">空间管理员</option>
+                      <option value="MEMBER">可编辑</option>
+                      <option value="VIEWER">只读</option>
+                    </select>
+                    <button
+                      class="btn sm ghost"
+                      :disabled="memberBusy"
+                      @click="removeSpaceMember(m)"
+                    >
+                      移除
+                    </button>
+                  </div>
+                  <div class="row" style="gap: 6px">
+                    <select class="input" style="flex: 1" v-model="newMember.userId">
+                      <option :value="null">选择成员…</option>
+                      <option v-for="u in memberOptions" :key="u.id" :value="u.id">
+                        {{ u.name }}（{{ u.login }}）
+                      </option>
+                    </select>
+                    <select class="input" style="width: auto" v-model="newMember.role">
+                      <option value="MEMBER">可编辑</option>
+                      <option value="VIEWER">只读</option>
+                      <option value="ADMIN">空间管理员</option>
+                    </select>
+                    <button
+                      class="btn sm primary"
+                      :disabled="memberBusy"
+                      @click="addSpaceMember"
+                    >
+                      添加
+                    </button>
+                  </div>
+                </div>
+
+                <div class="row" style="margin-top: 8px">
                   <button class="btn sm ghost" @click="showSpaceManage = false">收起</button>
                 </div>
               </div>

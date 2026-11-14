@@ -31,8 +31,22 @@ CREATE TABLE IF NOT EXISTS spaces (
   icon VARCHAR(32) NOT NULL DEFAULT '',
   description VARCHAR(500) NOT NULL DEFAULT '',
   sort INT NOT NULL DEFAULT 0,
+  restricted TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   UNIQUE KEY uk_spaces_slug (slug)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
+
+-- 空间成员（P2 Phase 3）：有成员记录则按空间角色判定，否则回退全局角色。
+-- 不设 user_id/space_id 为独立代理列：级联删除保证删空间、删成员时行随之消失。
+CREATE TABLE IF NOT EXISTS space_members (
+  space_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  role ENUM('ADMIN', 'MEMBER', 'VIEWER') NOT NULL DEFAULT 'MEMBER',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (space_id, user_id),
+  KEY idx_space_members_user (user_id),
+  CONSTRAINT fk_space_members_space FOREIGN KEY (space_id) REFERENCES spaces (id) ON DELETE CASCADE,
+  CONSTRAINT fk_space_members_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS pages (

@@ -16,11 +16,13 @@ import com.qa.kb.persistence.RevisionMapper;
 import com.qa.kb.persistence.SearchMapper;
 import com.qa.kb.persistence.SessionMapper;
 import com.qa.kb.persistence.SpaceMapper;
+import com.qa.kb.persistence.SpaceMemberMapper;
 import com.qa.kb.persistence.TagMapper;
 import com.qa.kb.persistence.UserMapper;
 import com.qa.kb.project.ProjectService;
 import com.qa.kb.report.ReportService;
 import com.qa.kb.search.SearchService;
+import com.qa.kb.space.SpaceAccessService;
 import com.qa.kb.space.SpaceService;
 import com.qa.kb.user.UserService;
 import com.qa.kb.web.AuditInterceptor;
@@ -91,8 +93,16 @@ public class AppConfig {
   }
 
   @Bean
-  public SpaceService spaceService(SpaceMapper spaceMapper) {
-    return new SpaceService(spaceMapper);
+  public SpaceService spaceService(
+      SpaceMapper spaceMapper, SpaceMemberMapper memberMapper, UserMapper userMapper) {
+    return new SpaceService(spaceMapper, memberMapper, userMapper);
+  }
+
+  /** P2 Phase 3：空间级权限判定（受限空间 / 成员角色 / 可见集合过滤）。 */
+  @Bean
+  public SpaceAccessService spaceAccessService(
+      SpaceMapper spaceMapper, SpaceMemberMapper memberMapper, PageMapper pageMapper) {
+    return new SpaceAccessService(spaceMapper, memberMapper, pageMapper);
   }
 
   @Bean

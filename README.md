@@ -83,6 +83,7 @@ netsh advfirewall firewall add rule name="QA-KB 8787" dir=in action=allow protoc
 - 正文使用 Markdown，保存时自动生成历史版本；可在「历史版本」中回滚，回滚前会把当前内容再存一版。
 - 标签按逗号分隔输入，按名称复用，不重复建标签。
 - 搜索结果带标题和正文片段，点击直接跳转。
+- **附件**（P2 Phase 1）：页面详情可上传 / 下载 / 删除附件，单文件 ≤ 20MB，删除页面时附件一并清理。
 
 **中文检索策略**（重点）：
 
@@ -114,6 +115,15 @@ netsh advfirewall firewall add rule name="QA-KB 8787" dir=in action=allow protoc
 - 登录名唯一且统一转小写；系统会阻止「停用/降级/删除最后一个可用 ADMIN」，避免把自己锁在门外。
 - 登录失败有频率限制（默认 10 次 / 15 分钟窗口），密码使用 BCrypt 存储。
 
+**空间级权限**（P2 Phase 3）：
+
+- 空间可标记为**受限**：列表 / 单点 / 页面树 / 页面 / 标签 / 搜索 / 回收站对非成员一律不可见（403 或不出现）。
+- 成员角色三档：**空间管理员**（可改空间设置与管理成员）/ **可编辑**（读写页面）/ **只读**（只能看）。
+- 有成员记录按空间角色，无记录回退全局角色；全局 VIEWER 即使是空间成员也不能写（只读底线）。
+- 创建受限空间时创建者自动入组空间管理员；「管理 → 成员」面板可增删成员、调整角色。
+
+**操作审计**（P2 Phase 2）：关键写操作与登录留痕进 `audit_log`，ADMIN 在「成员 → 操作审计」分页查看。
+
 ---
 
 ## 3. 数据与备份
@@ -126,7 +136,7 @@ netsh advfirewall firewall add rule name="QA-KB 8787" dir=in action=allow protoc
 | WAL 文件 | `data\kb.db-wal`、`data\kb.db-shm` | 运行期自动出现，**不要手工删除** |
 | 日志 | `data\qa-kb.log` | 运行日志 |
 | 备份 | `data\backups\kb-YYYYMMDD-HHmmss-SSS.zip` | 每份 zip 内含一个 `kb.db` |
-| 附件（预留） | `data\uploads` | P2 功能使用 |
+| 附件 | `data\uploads` | 页面附件（P2 Phase 1） |
 
 ### 3.2 自动备份
 
@@ -179,7 +189,7 @@ $env:KB_BACKUP_CRON='0 30 2 * * *'
 | `BIND_ADDRESS` | `0.0.0.0` | 监听地址；只允许本机可改为 `127.0.0.1` |
 | `KB_DB_PATH` | `./data/kb.db` | SQLite 数据库路径 |
 | `KB_LOG_FILE` | `./data/qa-kb.log` | 日志路径 |
-| `KB_UPLOAD_DIR` | `./data/uploads` | 附件目录（P2 预留） |
+| `KB_UPLOAD_DIR` | `./data/uploads` | 附件目录 |
 | `KB_SEED` | `true` | 首次启动是否初始化管理员 |
 | `KB_SEED_DEMO` | `true` | 是否写入演示空间 / 项目 / 周报 |
 | `KB_ADMIN_LOGIN` | `admin` | 初始管理员登录名 |
@@ -207,7 +217,7 @@ cd D:\qa-kb
 ```
 
 - 测试使用临时 SQLite 数据库，不会碰 `data\kb.db`。
-- 当前测试数：**292 个，全部通过**。
+- 当前测试数：**426 个，全部通过**。
 - 源码结构：
   - `src/main/java/com/qa/kb/web`：REST 接口
   - `src/main/java/com/qa/kb/{page,space,report,project,user,search,backup}`：业务逻辑
@@ -245,8 +255,5 @@ cd D:\qa-kb
 
 ## 7. 尚未包含（P2）
 
-- 附件上传/下载的前端入口（后端目录与依赖已预留）
-- 操作审计日志界面（`audit_log` 表已预留）
 - 用例管理与执行记录
 - 邮件 / 企业微信通知
-- 更细粒度的空间级权限（当前为全局角色）

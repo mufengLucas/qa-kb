@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qa.kb.persistence.TagMapper">
+
+  <!-- 幂等插入按方言：MySQL INSERT IGNORE / SQLite ON CONFLICT DO NOTHING。
+       两侧 tags.name 唯一、page_tags 主键 (page_id, tag_id) 均已存在（见 db/schema.sql）。
+       注：此前注解里写死 INSERT IGNORE 是 MySQL 语法，SQLite 直接语法错（对外表现为 500），
+       本文件把两条语句按 databaseId 分流修复。 -->
+  <insert id="upsert" databaseId="mysql">
+    INSERT IGNORE INTO tags (name) VALUES (#{name})
+  </insert>
+  <insert id="upsert" databaseId="sqlite">
+    INSERT INTO tags (name) VALUES (#{name}) ON CONFLICT(name) DO NOTHING
+  </insert>
+
+  <insert id="attach" databaseId="mysql">
+    INSERT IGNORE INTO page_tags (page_id, tag_id) VALUES (#{pageId}, #{tagId})
+  </insert>
+  <insert id="attach" databaseId="sqlite">
+    INSERT INTO page_tags (page_id, tag_id) VALUES (#{pageId}, #{tagId})
+    ON CONFLICT (page_id, tag_id) DO NOTHING
+  </insert>
+</mapper>

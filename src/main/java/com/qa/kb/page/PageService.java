@@ -167,8 +167,16 @@ public class PageService {
     return tagMapper.listByPage(pageId);
   }
 
-  public List<TagCount> allTags() {
-    return tagMapper.listAll();
+  /**
+   * 标签云（P2 Phase 3 起按可见空间过滤）。
+   *
+   * @param spaceIds 调用方（控制器）算出的可见空间 id；空集合直接返回空，避免 SQL {@code IN ()} 语法错误
+   */
+  public List<TagCount> allTags(Set<Long> spaceIds) {
+    if (spaceIds == null || spaceIds.isEmpty()) {
+      return List.of();
+    }
+    return tagMapper.listAllInSpaces(spaceIds);
   }
 
   private PageRow requirePage(long id) {

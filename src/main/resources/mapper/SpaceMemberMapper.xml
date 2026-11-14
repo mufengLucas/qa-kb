@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qa.kb.persistence.SpaceMemberMapper">
+
+  <!-- 成员 upsert（P2 Phase 3）：首插与改角色同一语义。
+       刻意不依赖 DuplicateKeyException 回退 updateRole——SQLite 的约束错（error 19）
+       不会被 Spring 翻译成 DuplicateKeyException（是 uncategorized SQLException），
+       try/catch 在 SQLite 上抓不到，表现为 500。 -->
+  <insert id="upsert" databaseId="mysql">
+    INSERT INTO space_members (space_id, user_id, role)
+    VALUES (#{spaceId}, #{userId}, #{role})
+    ON DUPLICATE KEY UPDATE role = #{role}
+  </insert>
+  <insert id="upsert" databaseId="sqlite">
+    INSERT INTO space_members (space_id, user_id, role)
+    VALUES (#{spaceId}, #{userId}, #{role})
+    ON CONFLICT (space_id, user_id) DO UPDATE SET role = excluded.role
+  </insert>
+</mapper>

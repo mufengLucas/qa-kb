@@ -19,7 +19,10 @@
     LIMIT #{limit}
   </select>
 
-  <select id="searchLike" resultType="com.qa.kb.model.SearchHit">
+  <!-- LIKE 降级路径：ESCAPE 字面量双方言不同——MySQL 字符串里反斜杠自身要转义写 '\\'
+       （解析后才是 1 个字符），SQLite 不处理反斜杠转义、必须写 '\'（写 '\\' 是 2 个字符，
+       报 "ESCAPE expression must be a single character"）。 -->
+  <select id="searchLike" databaseId="mysql" resultType="com.qa.kb.model.SearchHit">
     SELECT p.id,
            p.space_id,
            p.title,
@@ -30,6 +33,21 @@
       AND (#{spaceId} IS NULL OR p.space_id = #{spaceId})
       AND (p.title LIKE #{pattern} ESCAPE '\\'
         OR p.content_md LIKE #{pattern} ESCAPE '\\')
+    ORDER BY p.updated_at DESC
+    LIMIT #{limit}
+  </select>
+
+  <select id="searchLike" databaseId="sqlite" resultType="com.qa.kb.model.SearchHit">
+    SELECT p.id,
+           p.space_id,
+           p.title,
+           p.slug,
+           SUBSTRING(p.content_md, 1, 300) AS snippet
+    FROM pages p
+    WHERE p.deleted_at IS NULL
+      AND (#{spaceId} IS NULL OR p.space_id = #{spaceId})
+      AND (p.title LIKE #{pattern} ESCAPE '\'
+        OR p.content_md LIKE #{pattern} ESCAPE '\')
     ORDER BY p.updated_at DESC
     LIMIT #{limit}
   </select>
