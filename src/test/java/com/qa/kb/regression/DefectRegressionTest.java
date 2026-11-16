@@ -28,13 +28,14 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import com.qa.kb.security.SessionAuthenticationFilter;
+import com.qa.kb.db.MySqlTestDatabase;
 
 /**
- * 两个已取证缺陷的端到端回归（真实过滤链 + 真实 SQLite schema + 真实登录）。
+ * 两个已取证缺陷的端到端回归（真实过滤链 + 真实 MySQL schema + 真实登录）。
  *
  * <ol>
  *   <li>删空间 409（MySQL ERROR 1452）：空间下有嵌套父/子页时，必须先删 pages 行再删空间行。
- *       SQLite 开了 {@code PRAGMA foreign_keys=ON}，顺序错了同样失败，可挡住回归。
+ *       外键检查全程开启（{@code SET FOREIGN_KEY_CHECKS=ON}），顺序错了同样失败，可挡住回归。
  *   <li>周报保存 404：周报关联了已软删项目时，保存端返回 400 并提示刷新（不再 404/静默），
  *       读取端 JOIN 过滤让残留关联在刷新后不再出现。
  * </ol>
@@ -53,16 +54,7 @@ class DefectRegressionTest {
 
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry registry) {
-    String dbPath =
-        TEMP_DIR.resolve("kb-defect-test.db").toAbsolutePath().toString().replace('\\', '/');
-    registry.add(
-        "spring.datasource.url",
-        () ->
-            "jdbc:sqlite:"
-                + dbPath
-                + "?journal_mode=WAL&busy_timeout=5000&synchronous=NORMAL");
-    registry.add("spring.datasource.driver-class-name", () -> "org.sqlite.JDBC");
-    registry.add("spring.datasource.hikari.connection-init-sql", () -> "PRAGMA foreign_keys=ON");
+    MySqlTestDatabase.register(registry, "defect");
     registry.add("kb.seed.enabled", () -> "true");
     registry.add("kb.seed.demo", () -> "false");
     registry.add("kb.seed.admin-password", () -> ADMIN_PASSWORD);

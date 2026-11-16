@@ -29,11 +29,10 @@ import org.slf4j.LoggerFactory;
 /**
  * Consistent single-file database backups.
  *
- * <p>SQLite: {@code VACUUM INTO} produces a transactionally consistent copy even while the
- * application is running (WAL mode included). MySQL: a pure-JDBC logical dump ({@code kb.sql}) of
- * every base table, wrapped in {@code SET FOREIGN_KEY_CHECKS=0/1} so restore order does not matter.
+ * <p>MySQL: a pure-JDBC logical dump ({@code kb.sql}) of every base table, wrapped in
+ * {@code SET FOREIGN_KEY_CHECKS=0/1} so restore order does not matter.
  *
- * <p>The copy (or dump) is deflated into {@code kb-YYYYMMDD-HHmmss-SSS.zip} and, when configured,
+ * <p>The dump is deflated into {@code kb-YYYYMMDD-HHmmss-SSS.zip} and, when configured,
  * mirrored to an off-site directory. Old archives are pruned by filename so a lexical sort is also
  * a chronological sort.
  */
@@ -44,7 +43,6 @@ public class BackupService {
   private static final Logger log = LoggerFactory.getLogger(BackupService.class);
   private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
   private static final Pattern ARCHIVE_NAME = Pattern.compile("^kb-\\d{8}-\\d{6}-\\d{3}\\.zip$");
-  private static final String ENTRY_DB = "kb.db";
   private static final String ENTRY_SQL = "kb.sql";
   private static final int BUFFER = 64 * 1024;
 
@@ -113,23 +111,10 @@ public class BackupService {
       if (!connection.getAutoCommit()) {
         connection.setAutoCommit(true);
       }
-      boolean mysql = isMySql(connection);
-      Path target = dir.resolve(mysql ? ENTRY_SQL : ENTRY_DB);
-      if (mysql) {
-        dumpSql(connection, target);
-      } else {
-        String sqlPath = target.toString().replace('\\', '/').replace("'", "''");
-        try (Statement statement = connection.createStatement()) {
-          statement.execute("VACUUM INTO '" + sqlPath + "'");
-        }
-      }
+      Path target = dir.resolve(ENTRY_SQL);
+      dumpSql(connection, target);
       return target;
     }
-  }
-
-  private static boolean isMySql(Connection connection) throws SQLException {
-    String product = connection.getMetaData().getDatabaseProductName();
-    return product != null && product.toLowerCase(java.util.Locale.ROOT).contains("mysql");
   }
 
   /** MySQL：把每个基表导出为 INSERT 语句（含外键开关），恢复时无需关心表顺序。 */

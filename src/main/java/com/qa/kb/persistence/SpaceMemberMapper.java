@@ -21,7 +21,7 @@ public interface SpaceMemberMapper {
       "SELECT role FROM space_members WHERE space_id = #{spaceId} AND user_id = #{userId}")
   Optional<String> findRole(@Param("spaceId") long spaceId, @Param("userId") long userId);
 
-  /** 首插与改角色一体（MySQL ON DUPLICATE KEY / SQLite ON CONFLICT，见 mapper XML）。 */
+  /** 首插与改角色一体（MySQL ON DUPLICATE KEY，见 mapper XML）。 */
   int upsert(
       @Param("spaceId") long spaceId, @Param("userId") long userId, @Param("role") String role);
 

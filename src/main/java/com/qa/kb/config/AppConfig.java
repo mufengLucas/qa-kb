@@ -28,10 +28,7 @@ import com.qa.kb.user.UserService;
 import com.qa.kb.web.AuditInterceptor;
 import java.time.Clock;
 import java.time.ZoneId;
-import java.util.Properties;
 import javax.sql.DataSource;
-import org.apache.ibatis.mapping.DatabaseIdProvider;
-import org.apache.ibatis.mapping.VendorDatabaseIdProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -58,20 +55,6 @@ public class AppConfig {
   @Bean
   public PasswordEncoder passwordEncoder() {
     return new BCryptPasswordEncoder(10);
-  }
-
-  /**
-   * MyBatis 多方言支持：按 JDBC 产品名识别 MySQL / SQLite，
-   * {@code lastInsertId} 等语句在 XML 中用 {@code databaseId} 提供两套实现。
-   */
-  @Bean
-  public DatabaseIdProvider databaseIdProvider() {
-    VendorDatabaseIdProvider provider = new VendorDatabaseIdProvider();
-    Properties names = new Properties();
-    names.setProperty("MySQL", "mysql");
-    names.setProperty("SQLite", "sqlite");
-    provider.setProperties(names);
-    return provider;
   }
 
   @Bean

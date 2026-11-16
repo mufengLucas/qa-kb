@@ -10,25 +10,45 @@
 
 另外包含成员与角色管理（ADMIN / MEMBER / VIEWER）、每日自动备份和管理员手动备份。
 
-技术栈刻意保持轻量，**不需要 Docker、MySQL、Redis、Elasticsearch，也不需要 Node.js**：
+技术栈刻意保持轻量，**前端不需要 Node.js，也不需要 Redis、Elasticsearch**；唯一的外部依赖是数据库——**只支持 MySQL**（本机用 Docker 起一个即可）：
 
 | 组件 | 选型 |
 | --- | --- |
 | 运行时 | JDK 21（Temurin） |
 | 构建 | Maven 3.9 |
 | 后端 | Spring Boot 3.5 + MyBatis |
-| 数据库 | SQLite（单文件，WAL 模式，FTS5 trigram 索引） |
+| 数据库 | **MySQL 8**（InnoDB + utf8mb4，中文检索靠 ngram `FULLTEXT` 索引） |
 | 前端 | Vue 3 全局构建版，纯静态文件，无打包步骤 |
 
 ---
 
 ## 1. 快速启动
 
+### 1.0 启动 MySQL（每个新环境先做一次）
+
+应用只连 MySQL，启动前必须先有一个跑在 `127.0.0.1:3306` 的 MySQL 8，库名 `qa_kb`：
+
+```powershell
+$env:MYSQL_ROOT_PASSWORD='<换成你自己的强口令，不要写进仓库>'
+& 'C:\Program Files\Docker\Docker\resources\bin\docker.exe' run -d --name mysql-kb `
+  -e MYSQL_ROOT_PASSWORD=$env:MYSQL_ROOT_PASSWORD `
+  -e MYSQL_DATABASE=qa_kb `
+  -v D:\docker\mysql\kb-data:/var/lib/mysql `
+  -p 3306:3306 mysql:8.3
+```
+
+`qa_kb` 库与表由应用启动时的 `SchemaInitializer` 幂等创建，不用手工建表。
+仓库里的 `docker-compose.yml` 也定义了等价的数据库服务（`qa-kb-db`，`mysql:8.4`），
+连同 `Dockerfile` 用于容器化部署，二选一即可。
+
+**口令只走环境变量**：应用与测试都读 `KB_DB_PASSWORD`（见 §4），仓库里不存放任何真实口令。
+
 ### 1.1 环境变量（每个新开的 PowerShell 窗口都要设置一次）
 
 ```powershell
 $env:JAVA_HOME='D:\java\jdk21'
 $env:Path="D:\java\jdk21\bin;D:\java\apache-maven-3.9.16\bin;$env:Path"
+$env:KB_DB_PASSWORD='<与 MySQL root 口令一致>'
 ```
 
 ### 1.2 开发模式启动
@@ -47,6 +67,8 @@ cd D:\qa-kb
 & 'D:\java\apache-maven-3.9.16\bin\mvn.cmd' -B -DskipTests package
 & 'D:\java\jdk21\bin\java.exe' -jar 'D:\qa-kb\target\kb.jar'
 ```
+
+不注入 `KB_DB_PASSWORD` 时连接会被 MySQL 拒绝，启动日志里会看到数据库连接错误。
 
 ### 1.4 访问地址
 
@@ -87,8 +109,8 @@ netsh advfirewall firewall add rule name="QA-KB 8787" dir=in action=allow protoc
 
 **中文检索策略**（重点）：
 
-- 查询 ≥ 3 个字符：走 SQLite **FTS5 trigram** 索引，支持中文子串匹配。
-- 查询 1~2 个字符（如「登录」「超时」）：trigram 无法命中，自动降级为 `LIKE '%…%'`，仍能搜到。
+- 查询 ≥ 3 个字符：走 MySQL **ngram `FULLTEXT` 索引**（`MATCH ... AGAINST`），支持中文子串匹配。
+- 查询 1~2 个字符（如「登录」「超时」）：ngram token 拼不出 3 字组合，自动降级为 `LIKE '%…%'`，仍能搜到。
 - 单条查询上限 100 字符；空白查询返回参数错误。
 
 ### 2.2 周报
@@ -132,15 +154,15 @@ netsh advfirewall firewall add rule name="QA-KB 8787" dir=in action=allow protoc
 
 | 内容 | 默认路径 | 说明 |
 | --- | --- | --- |
-| 主数据库 | `D:\qa-kb\data\kb.db` | SQLite 单文件 |
-| WAL 文件 | `data\kb.db-wal`、`data\kb.db-shm` | 运行期自动出现，**不要手工删除** |
+| 主数据库 | MySQL（Docker 容器 `mysql-kb`，数据目录 `D:\docker\mysql\kb-data`） | 库名 `qa_kb`，表由 `SchemaInitializer` 幂等创建 |
 | 日志 | `data\qa-kb.log` | 运行日志 |
-| 备份 | `data\backups\kb-YYYYMMDD-HHmmss-SSS.zip` | 每份 zip 内含一个 `kb.db` |
+| 备份 | `data\backups\kb-YYYYMMDD-HHmmss-SSS.zip` | 每份 zip 内含一个 `kb.sql`（逻辑 dump） |
 | 附件 | `data\uploads` | 页面附件（P2 Phase 1） |
 
 ### 3.2 自动备份
 
-- 每天 **02:30**（Asia/Shanghai）自动执行一次，使用 SQLite `VACUUM INTO` 生成一致性快照，再压缩为 zip。
+- 每天 **02:30**（Asia/Shanghai）自动执行一次：纯 JDBC 把每个基表导出成 `INSERT` 语句
+  （首尾包 `SET FOREIGN_KEY_CHECKS=0/1`，恢复时不依赖表顺序），再压缩为 zip。
 - 本地默认保留最近 **14** 份，按文件名（零填充时间戳）轮换删除最旧的。
 - 管理员也可以在「成员 → 数据备份」点「立即备份」，对应接口 `POST /api/admin/backup`。
 - 配置了异地目录后，每份备份会额外复制一份，并按相同规则清理。
@@ -165,17 +187,36 @@ $env:KB_BACKUP_KEEP='14'
 $env:KB_BACKUP_CRON='0 30 2 * * *'
 ```
 
-> 异地目录建议选另一台机器 / NAS / 移动硬盘。不要把 `data` 目录本身放进 OneDrive、
-> 百度网盘等实时同步目录，SQLite 的 WAL 文件被同步工具并发读写容易损坏数据库。
+> 异地目录建议选另一台机器 / NAS / 移动硬盘。数据库本体在 Docker 卷里，
+> 不要把 `data` 目录以外的数据目录整个放进 OneDrive、百度网盘等实时同步目录。
 
 ### 3.3 从备份恢复
 
-1. 停止应用（关闭运行窗口，或在任务管理器结束对应的 `java.exe`）。
-2. 把 `data\kb.db-wal`、`data\kb.db-shm` 删除。
-3. 解压最新的 `kb-YYYYMMDD-HHmmss-SSS.zip`，用里面的 `kb.db` 覆盖 `data\kb.db`。
-4. 重新启动应用，用管理员账号登录抽查内容。
+> `kb.sql` **只含数据（INSERT），不含建表语句**——表结构由 `V1__init.sql` 负责。
+> 因此恢复的目标库必须**先有表**，且里面若已有数据会和 dump 的主键冲突。
 
-建议每季度做一次「解压到临时目录 → 用备份启动到 8788 端口 → 登录检查」的演练，确认备份真的可用。
+**整库丢失（换机器 / 误删库）：**
+
+1. 起一个空 MySQL（§1.0），停止一切正在运行的应用进程。
+2. 先给空库建表，二选一：
+   - 启动一次应用，看到 `MySQL schema ready` 后立刻停掉；或
+   - 手工导入建表脚本：
+     ```powershell
+     Get-Content 'D:\qa-kb\src\main\resources\db\migration\V1__init.sql' -Raw -Encoding UTF8 `
+       | docker exec -i mysql-kb mysql -uroot -p"$env:MYSQL_ROOT_PASSWORD" qa_kb
+     ```
+3. 解压最新的 `kb-YYYYMMDD-HHmmss-SSS.zip`，把 `kb.sql` 灌进去：
+
+   ```powershell
+   Get-Content kb.sql -Raw -Encoding UTF8 | docker exec -i mysql-kb mysql -uroot -p"$env:MYSQL_ROOT_PASSWORD" qa_kb
+   ```
+
+4. 启动应用，用管理员账号登录抽查内容。
+
+**回滚到某天的数据**：现有库里有数据，直接导会主键冲突——把现有库整个 DROP 后按上面 1~4 重建
+（或先把 `kb.sql` 导入临时库核对无误再整体替换）。
+
+建议每季度做一次「导入到临时库 → 用备份启动到 8788 端口 → 登录检查」的演练，确认备份真的可用。
 
 ---
 
@@ -187,7 +228,7 @@ $env:KB_BACKUP_CRON='0 30 2 * * *'
 | --- | --- | --- |
 | `PORT` | `8787` | 服务端口 |
 | `BIND_ADDRESS` | `0.0.0.0` | 监听地址；只允许本机可改为 `127.0.0.1` |
-| `KB_DB_PATH` | `./data/kb.db` | SQLite 数据库路径 |
+| `KB_DB_USER` | `root` | 数据库用户（数据源 URL 固定为 `127.0.0.1:3306/qa_kb`，要改库地址请改 `application.yml`） |
 | `KB_LOG_FILE` | `./data/qa-kb.log` | 日志路径 |
 | `KB_UPLOAD_DIR` | `./data/uploads` | 附件目录 |
 | `KB_SEED` | `true` | 首次启动是否初始化管理员 |
@@ -210,26 +251,30 @@ $env:KB_BACKUP_CRON='0 30 2 * * *'
 ```powershell
 $env:JAVA_HOME='D:\java\jdk21'
 $env:Path="D:\java\jdk21\bin;D:\java\apache-maven-3.9.16\bin;$env:Path"
+$env:KB_DB_PASSWORD='<与 MySQL root 口令一致>'   # 跑测试前必设，只留在当前会话里
 
 cd D:\qa-kb
 & 'D:\java\apache-maven-3.9.16\bin\mvn.cmd' -B test      # 全部单元 + 接口测试
 & 'D:\java\apache-maven-3.9.16\bin\mvn.cmd' -B package   # 生成可执行 jar
 ```
 
-- 测试使用临时 SQLite 数据库，不会碰 `data\kb.db`。
-- 当前测试数：**426 个，全部通过**。
+- **测试只用 MySQL**：每个 `@SpringBootTest` 测试类独占一个一次性 schema（`qa_kb_<名字>`，
+  启动时 DROP + CREATE），因此不会污染生产库 `qa_kb`，用例之间也互不干扰。
+- 连接信息来自环境变量 `KB_DB_HOST` / `KB_DB_PORT` / `KB_DB_USER` / `KB_DB_PASSWORD`
+  （缺 `KB_DB_PASSWORD` 时测试会直接报错并给出注入提示）。
+- 当前测试数：**420 个，全部通过**。
 - 源码结构：
   - `src/main/java/com/qa/kb/web`：REST 接口
   - `src/main/java/com/qa/kb/{page,space,report,project,user,search,backup}`：业务逻辑
   - `src/main/java/com/qa/kb/persistence`：MyBatis Mapper
-  - `src/main/resources/db/schema.sql`：SQLite 建表 + FTS5 + 触发器
+  - `src/main/resources/db/migration/V1__init.sql`：MySQL 建表脚本（`SchemaInitializer` 幂等执行）
   - `src/main/resources/static`：Vue 单页前端（`index.html` / `app.js` / `styles.css`）
 
-### 关于 MySQL / Docker 文件
+### 关于 Docker 文件
 
-仓库里保留了迁移前的 `docker-compose.yml`、`Dockerfile`、`V1__init.sql`、`.env.example`，
-仅作历史参考，**当前启动路径完全不使用它们**。MySQL 版本的集成测试也保留在
-`src/test/legacy-mysql-it/`，默认不参与 `mvn test`。
+`docker-compose.yml`（`qa-kb-db` + `qa-kb-app`）、`Dockerfile`、`.env.example` 是容器化部署的
+一条完整路径；本机日常开发直接用 §1.0 的 `docker run` 起库、本地跑 jar 即可，两种方式二选一。
+`src/test/legacy-mysql-it/` 是早期基于 Testcontainers 的集成测试，不参与 `mvn test`。
 
 ---
 
@@ -248,8 +293,11 @@ cd D:\qa-kb
     起始于 `D:\qa-kb`。
   - 或用 WinSW / NSSM 注册为 Windows 服务。
 - 日志排错优先看 `data\qa-kb.log` 和启动窗口输出。
-- 升级步骤：停应用 → 备份 `data\kb.db` → 替换 jar → 启动 → 管理员登录抽查。
-  数据库结构由 `schema.sql` 幂等初始化，新增表会自动创建；改字段仍需手工迁移。
+- 升级步骤：停应用 → 点「成员 → 数据备份」（或 `POST /api/admin/backup`）出一份 `kb.sql` →
+  替换 jar → 启动 → 管理员登录抽查。
+  数据库结构由 `db/migration/V1__init.sql` 幂等初始化，新增表会自动创建；改字段仍需手工迁移。
+- 用计划任务 / 服务方式启动时，**记得在任务里配置 `KB_DB_PASSWORD`**（以及 `KB_ADMIN_PASSWORD`），
+  否则进程连不上数据库。
 
 ---
 

@@ -1,18 +1,19 @@
 package com.qa.kb.search;
 
 /**
- * Decides between FTS5 trigram MATCH and LIKE for a user query.
+ * Decides between MySQL FULLTEXT {@code MATCH ... AGAINST} (ngram parser) and LIKE for a user
+ * query.
  *
- * <p>FTS5's trigram tokenizer indexes every 3-character sequence, so a query shorter than 3 code
- * points can never match. That is why 1-2 character Chinese queries (登录 / 超时 / 环境) must fall
- * back to a LIKE scan. See the project plan, section "中文搜索".
+ * <p>The ngram parser indexes every 3-character sequence (server-side {@code ngram_token_size}),
+ * so a query shorter than 3 code points can never match. That is why 1-2 character Chinese queries
+ * (登录 / 超时 / 环境) must fall back to a LIKE scan. See the project plan, section "中文搜索".
  */
 public final class SearchQueryPlanner {
 
   /** Matches the server-side guard in the search mapper. */
   public static final int MAX_QUERY_CODE_POINTS = 100;
 
-  /** trigram 是 3 字符一个 token，短于 3 个码点的查询无法命中。 */
+  /** ngram 按 3 字符一个 token，短于 3 个码点的查询无法命中。 */
   public static final int FULLTEXT_MIN_CODE_POINTS = 3;
 
   private SearchQueryPlanner() {}
@@ -39,7 +40,7 @@ public final class SearchQueryPlanner {
   }
 
   /**
-   * FTS5 的短语用双引号包裹，内部的双引号用两个双引号转义（不是反斜杠）。
+   * 布尔模式的短语用双引号包裹，内部的双引号用两个双引号转义（不是反斜杠）。
    * 这样 "{@code 登录 接口}" 被当成一个短语而不是两个词的 OR。
    */
   private static String quote(String value) {

@@ -6,15 +6,18 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
 /**
- * SQLite 没有原生时间类型，sqlite-jdbc 也不支持 {@code getObject(..., LocalDateTime.class)}。
- * 这里统一用 {@code yyyy-MM-dd HH:mm:ss} 文本存储与解析，配套两个 TypeHandler 使用。
+ * 时间列统一以文本形式读写：{@code yyyy-MM-dd HH:mm:ss}（日期为 {@code yyyy-MM-dd}）。
+ *
+ * <p>列类型是 MySQL 的 DATETIME/DATE 时，JDBC 驱动读出来正是这种文本，写回用 setString 也会
+ * 被驱动按时间解析，因此 TypeHandler 两侧都稳。配套 {@link LocalDateTypeHandler} /
+ * {@link LocalDateTimeTypeHandler} 使用。
  */
-public final class SqliteTimes {
+public final class SqlTimes {
 
   public static final DateTimeFormatter DATE_TIME =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-  private SqliteTimes() {}
+  private SqlTimes() {}
 
   public static String format(LocalDateTime value) {
     return value.format(DATE_TIME);

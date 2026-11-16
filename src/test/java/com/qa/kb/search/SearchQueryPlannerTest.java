@@ -136,14 +136,14 @@ class SearchQueryPlannerTest {
     void escapesDoubleQuotesSoThePhraseStaysIntact() {
       SearchQuery query = SearchQueryPlanner.plan("he said \"hi\"");
       assertThat(query.mode()).isEqualTo(SearchMode.FULLTEXT);
-      // FTS5 的字符串字面量里，双引号用两个双引号转义（反斜杠不是转义符）
+      // MySQL 布尔模式的短语里，双引号用两个双引号转义（反斜杠不是转义符）
       assertThat(query.booleanQuery()).isEqualTo("\"he said \"\"hi\"\"\"");
     }
 
     @Test
     void keepsBackslashAsIs() {
       SearchQuery query = SearchQueryPlanner.plan("c:\\temp");
-      // FTS5 中反斜杠没有转义含义，原样传入
+      // MySQL 布尔模式中反斜杠没有转义含义，原样传入
       assertThat(query.booleanQuery()).isEqualTo("\"c:\\temp\"");
     }
   }

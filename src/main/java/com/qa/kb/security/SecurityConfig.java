@@ -23,7 +23,7 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
  * Stateless, cookie-session security.
  *
  * <ul>
- *   <li>Authentication: opaque session cookie validated against SQLite on every request.
+ *   <li>Authentication: opaque session cookie validated against MySQL on every request.
  *   <li>CSRF: double-submit cookie ({@code XSRF-TOKEN} / {@code X-XSRF-TOKEN}) for all mutations.
  *       Login is exempt so a first-time browser can sign in without a prior token.
  *   <li>Authorization: everyone authenticated can read; MEMBER/ADMIN can write; ADMIN manages users.

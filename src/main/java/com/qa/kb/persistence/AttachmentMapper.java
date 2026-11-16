@@ -24,7 +24,7 @@ public interface AttachmentMapper {
       @Param("mime") String mime,
       @Param("uploaderId") long uploaderId);
 
-  /** 自增主键回填，SQL 在 {@code mapper/AttachmentMapper.xml} 中按 databaseId 分流。 */
+  /** 自增主键回填，SQL 在 {@code mapper/AttachmentMapper.xml} 中。 */
   long lastInsertId();
 
   @Select(

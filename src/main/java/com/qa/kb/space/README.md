@@ -16,8 +16,6 @@
 - **成员端点**：`GET/POST /api/spaces/{id}/members`（upsert）、`DELETE .../members/{userId}`；
   创建受限空间时创建者自动入组 ADMIN。
 - **穿透范围**：空间列表、单点、页面树、页面读写、标签云、搜索、回收站、附件全部按可见空间过滤。
-- **双方言**：成员 upsert 在 `mapper/SpaceMemberMapper.xml` 按 `databaseId` 分流
-  （MySQL `ON DUPLICATE KEY UPDATE` / SQLite `ON CONFLICT ... DO UPDATE`）；
-  同批顺手修复 `TagMapper`（原注解 `INSERT IGNORE` 是 MySQL 语法，SQLite 直接语法错）
-  与 `SearchMapper.searchLike` 的 `ESCAPE` 字面量方言差异。
+- **单方言 SQL**：成员 upsert 用 `mapper/SpaceMemberMapper.xml` 的 `ON DUPLICATE KEY UPDATE`；
+  `TagMapper` 用 `INSERT IGNORE`，`SearchMapper.searchLike` 用 `ESCAPE '\\'`，均为 MySQL 写法。
 - **前端**：空间表单有「受限」开关；「管理」面板每个空间可开关受限、打开成员面板增删成员 / 改角色。

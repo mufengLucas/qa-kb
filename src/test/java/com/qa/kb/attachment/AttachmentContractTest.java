@@ -23,13 +23,14 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import com.qa.kb.db.MySqlTestDatabase;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
- * 附件上传/下载/删除的端到端契约（真实过滤链 + 真实 SQLite + 真实落盘）。
+ * 附件上传/下载/删除的端到端契约（真实过滤链 + 真实 MySQL + 真实落盘）。
  *
  * <p>P2 Phase 1：页面附件从元数据表（schema 已备）到 HTTP 面的完整链路，
  * 含中文文件名的 RFC 5987 下载头与删除后的 404 回收。
@@ -47,16 +48,7 @@ class AttachmentContractTest {
 
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry registry) {
-    String dbPath =
-        TEMP_DIR.resolve("kb-attach-test.db").toAbsolutePath().toString().replace('\\', '/');
-    registry.add(
-        "spring.datasource.url",
-        () ->
-            "jdbc:sqlite:"
-                + dbPath
-                + "?journal_mode=WAL&busy_timeout=5000&synchronous=NORMAL");
-    registry.add("spring.datasource.driver-class-name", () -> "org.sqlite.JDBC");
-    registry.add("spring.datasource.hikari.connection-init-sql", () -> "PRAGMA foreign_keys=ON");
+    MySqlTestDatabase.register(registry, "attach");
     registry.add("kb.seed.enabled", () -> "true");
     registry.add("kb.seed.demo", () -> "false");
     registry.add("kb.seed.admin-password", () -> ADMIN_PASSWORD);

@@ -17,9 +17,8 @@ import org.springframework.stereotype.Component;
 /**
  * 启动时建表（幂等）。
  *
- * <p>按 JDBC 元数据自动识别方言：MySQL 执行 {@code /db/migration/V1__init.sql}
- * （CREATE TABLE IF NOT EXISTS），SQLite 执行 PRAGMA + {@code /db/schema.sql}。
- * 两条路径都可重复执行，首次启动自动建库。
+ * <p>只支持 MySQL：执行 {@code /db/migration/V1__init.sql}（CREATE TABLE IF NOT EXISTS），
+ * 再幂等地补齐历史版本缺的列。可重复执行，首次启动自动建库。
  */
 @Component
 @Order(0)
@@ -39,22 +38,14 @@ public class SchemaInitializer implements ApplicationRunner {
       String product = connection.getMetaData().getDatabaseProductName();
       boolean mysql =
           product != null && product.toLowerCase(Locale.ROOT).contains("mysql");
-      if (mysql) {
-        SqlScriptRunner.run(connection, "/db/migration/V1__init.sql");
-        ensureColumn(connection, "projects", "deleted_at", "DATETIME(3) NULL", true);
-        ensureColumn(connection, "spaces", "restricted", "TINYINT(1) NOT NULL DEFAULT 0", true);
-        log.info("MySQL schema ready");
-      } else {
-        try (Statement st = connection.createStatement()) {
-          st.execute("PRAGMA journal_mode=WAL");
-          st.execute("PRAGMA foreign_keys=ON");
-          st.execute("PRAGMA busy_timeout=5000");
-        }
-        SqlScriptRunner.run(connection, "/db/schema.sql");
-        ensureColumn(connection, "projects", "deleted_at", "TEXT", false);
-        ensureColumn(connection, "spaces", "restricted", "INTEGER NOT NULL DEFAULT 0", false);
-        log.info("SQLite schema ready");
+      if (!mysql) {
+        throw new IllegalStateException(
+            "本项目只支持 MySQL（当前数据源: " + product + "），请检查 spring.datasource.url");
       }
+      SqlScriptRunner.run(connection, "/db/migration/V1__init.sql");
+      ensureColumn(connection, "projects", "deleted_at", "DATETIME(3) NULL");
+      ensureColumn(connection, "spaces", "restricted", "TINYINT(1) NOT NULL DEFAULT 0");
+      log.info("MySQL schema ready");
     }
   }
 
@@ -62,31 +53,18 @@ public class SchemaInitializer implements ApplicationRunner {
    * 老库补列：建表脚本是 {@code CREATE TABLE IF NOT EXISTS}，不会给已存在的表加新列，
    * 所以每次启动再幂等地检查一遍（首次建库时列已存在，跳过）。
    */
-  private static void ensureColumn(
-      Connection connection, String table, String column, String ddlType, boolean mysql)
+  private static void ensureColumn(Connection connection, String table, String column, String ddlType)
       throws SQLException {
-    boolean exists = false;
-    if (mysql) {
-      try (PreparedStatement ps =
-          connection.prepareStatement(
-              "SELECT COUNT(*) FROM information_schema.COLUMNS "
-                  + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?")) {
-        ps.setString(1, table);
-        ps.setString(2, column);
-        try (ResultSet rs = ps.executeQuery()) {
-          rs.next();
-          exists = rs.getInt(1) > 0;
-        }
-      }
-    } else {
-      try (Statement st = connection.createStatement();
-          ResultSet rs = st.executeQuery("PRAGMA table_info(" + table + ")")) {
-        while (rs.next()) {
-          if (column.equalsIgnoreCase(rs.getString("name"))) {
-            exists = true;
-            break;
-          }
-        }
+    boolean exists;
+    try (PreparedStatement ps =
+        connection.prepareStatement(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?")) {
+      ps.setString(1, table);
+      ps.setString(2, column);
+      try (ResultSet rs = ps.executeQuery()) {
+        rs.next();
+        exists = rs.getInt(1) > 0;
       }
     }
     if (!exists) {

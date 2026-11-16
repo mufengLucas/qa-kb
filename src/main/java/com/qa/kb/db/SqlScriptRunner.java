@@ -10,12 +10,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 执行 classpath 下的 SQL 脚本。
- * 语句之间使用 "--> statement-breakpoint" 分隔，避免按分号切割时被触发器里的 BEGIN...END 打断。
+ * 执行 classpath 下的 SQL 脚本（MySQL 迁移脚本）。
+ * 语句之间按分号切割，行首 {@code --} 注释会被忽略。
  */
 public final class SqlScriptRunner {
-
-    public static final String BREAKPOINT = "--> statement-breakpoint";
 
     private SqlScriptRunner() {
     }
@@ -33,10 +31,7 @@ public final class SqlScriptRunner {
 
     public static List<String> split(String script) {
         List<String> result = new ArrayList<>();
-        // 有 breakpoint 标记按标记切（兼容触发器里的分号）；否则按分号切（MySQL 迁移脚本无标记）。
-        String[] chunks =
-                script.contains(BREAKPOINT) ? script.split(BREAKPOINT) : script.split(";");
-        for (String chunk : chunks) {
+        for (String chunk : script.split(";")) {
             String cleaned = stripLineComments(chunk).trim();
             if (!cleaned.isEmpty()) {
                 result.add(cleaned);

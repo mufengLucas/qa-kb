@@ -9,28 +9,28 @@ import org.apache.ibatis.type.BaseTypeHandler;
 import org.apache.ibatis.type.JdbcType;
 import org.apache.ibatis.type.MappedTypes;
 
-/** SQLite 没有 DATE 类型：统一用 {@code yyyy-MM-dd} 文本读写 LocalDate。 */
+/** 日期统一以 {@code yyyy-MM-dd} 文本读写 LocalDate（见 {@link SqlTimes}）。 */
 @MappedTypes(LocalDate.class)
 public class LocalDateTypeHandler extends BaseTypeHandler<LocalDate> {
 
   @Override
   public void setNonNullParameter(PreparedStatement ps, int i, LocalDate parameter, JdbcType jdbcType)
       throws SQLException {
-    ps.setString(i, SqliteTimes.format(parameter));
+    ps.setString(i, SqlTimes.format(parameter));
   }
 
   @Override
   public LocalDate getNullableResult(ResultSet rs, String columnName) throws SQLException {
-    return SqliteTimes.parseDate(rs.getString(columnName));
+    return SqlTimes.parseDate(rs.getString(columnName));
   }
 
   @Override
   public LocalDate getNullableResult(ResultSet rs, int columnIndex) throws SQLException {
-    return SqliteTimes.parseDate(rs.getString(columnIndex));
+    return SqlTimes.parseDate(rs.getString(columnIndex));
   }
 
   @Override
   public LocalDate getNullableResult(CallableStatement cs, int columnIndex) throws SQLException {
-    return SqliteTimes.parseDate(cs.getString(columnIndex));
+    return SqlTimes.parseDate(cs.getString(columnIndex));
   }
 }

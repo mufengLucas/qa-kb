@@ -23,13 +23,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import com.qa.kb.db.MySqlTestDatabase;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
- * 空间权限端到端契约（P2 Phase 3）：真实过滤链 + 真实 SQLite。
+ * 空间权限端到端契约（P2 Phase 3）：真实过滤链 + 真实 MySQL（一次性 schema）。
  *
  * <p>覆盖：受限空间对非成员隐藏与 403、成员加入后可见可读、空间角色收紧写（全局 MEMBER +
  * 空间 VIEWER → 403）、无成员记录回退全局角色、管理操作需空间 ADMIN、回收站/标签/搜索按可见空间过滤。
@@ -47,16 +48,7 @@ class SpacePermissionContractTest {
 
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry registry) {
-    String dbPath =
-        TEMP_DIR.resolve("kb-space-perm-test.db").toAbsolutePath().toString().replace('\\', '/');
-    registry.add(
-        "spring.datasource.url",
-        () ->
-            "jdbc:sqlite:"
-                + dbPath
-                + "?journal_mode=WAL&busy_timeout=5000&synchronous=NORMAL");
-    registry.add("spring.datasource.driver-class-name", () -> "org.sqlite.JDBC");
-    registry.add("spring.datasource.hikari.connection-init-sql", () -> "PRAGMA foreign_keys=ON");
+    MySqlTestDatabase.register(registry, "spaceperm");
     registry.add("kb.seed.enabled", () -> "true");
     registry.add("kb.seed.demo", () -> "false");
     registry.add("kb.seed.admin-password", () -> ADMIN_PASSWORD);

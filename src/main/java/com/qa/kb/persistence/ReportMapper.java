@@ -16,8 +16,8 @@ import org.apache.ibatis.annotations.Select;
 public interface ReportMapper {
 
   /**
-   * 日报/周报幂等保存（按 user+date 唯一键）。MySQL 与 SQLite 语法不同，实现见
-   * {@code mapper/ReportMapper.xml} 中按 {@code databaseId} 分流的两套 SQL。
+   * 日报/周报幂等保存（按 user+date 唯一键）。MySQL {@code ON DUPLICATE KEY} upsert，
+   * 实现见 {@code mapper/ReportMapper.xml}。
    */
   int upsert(
       @Param("userId") long userId,
@@ -97,7 +97,7 @@ public interface ReportMapper {
    *
    * <p>清单条目可以在正文保存之前先添加，此时需要一行 {@code daily_reports} 作为挂载点；
    * 用 upsert 会把已保存的正文清空，所以必须"仅在缺失时插入"。INSERT ... SELECT ... WHERE
-   * NOT EXISTS 在 MySQL 8 与 SQLite 上都能执行。
+   * NOT EXISTS 在 MySQL 8 上可直接执行。
    */
   @Insert(
       "INSERT INTO daily_reports (user_id, report_date, done, plan, blockers, status) "
@@ -110,8 +110,8 @@ public interface ReportMapper {
   int deleteProjectLinks(@Param("reportId") long reportId);
 
   /**
-   * 周报/日报关联项目（按 report_id+project_id 唯一键去重）。MySQL 的 {@code INSERT IGNORE}
-   * 与 SQLite 的 {@code INSERT OR IGNORE} 语法不同，实现见 {@code mapper/ReportMapper.xml}。
+   * 周报/日报关联项目（按 report_id+project_id 唯一键去重）。MySQL {@code INSERT IGNORE}，
+   * 实现见 {@code mapper/ReportMapper.xml}。
    */
   int insertProjectLink(@Param("reportId") long reportId, @Param("projectId") long projectId);
 }

@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import com.qa.kb.db.MySqlTestDatabase;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -31,7 +32,7 @@ import org.springframework.test.web.servlet.MvcResult;
  * <p>The SPA reads the {@code XSRF-TOKEN} cookie and echoes it verbatim in the
  * {@code X-XSRF-TOKEN} header. Spring Security 6 XOR-masks tokens by default, which silently
  * rejects that raw value with 403. These tests pin the raw double-submit behaviour end to end
- * (real filter chain, real SQLite schema, real login) so the defect cannot come back.
+ * (real filter chain, real MySQL schema, real login) so the defect cannot come back.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -46,16 +47,7 @@ class CsrfCookieContractTest {
 
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry registry) {
-    String dbPath = TEMP_DIR.resolve("kb-csrf-test.db").toAbsolutePath().toString().replace('\\', '/');
-    registry.add(
-        "spring.datasource.url",
-        () ->
-            "jdbc:sqlite:"
-                + dbPath
-                + "?journal_mode=WAL&busy_timeout=5000&synchronous=NORMAL");
-    // application.yml 固定为 MySQL 驱动与 MySQL 连接初始化 SQL，SQLite 测试必须覆盖掉
-    registry.add("spring.datasource.driver-class-name", () -> "org.sqlite.JDBC");
-    registry.add("spring.datasource.hikari.connection-init-sql", () -> "PRAGMA foreign_keys=ON");
+    MySqlTestDatabase.register(registry, "csrf");
     registry.add("kb.seed.enabled", () -> "true");
     registry.add("kb.seed.demo", () -> "false");
     registry.add("kb.seed.admin-password", () -> ADMIN_PASSWORD);

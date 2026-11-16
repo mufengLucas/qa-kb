@@ -11,7 +11,7 @@ import org.apache.ibatis.annotations.Select;
  * 操作审计读写。
  *
  * <p>查询端 LEFT JOIN users：成员被删除后审计行仍在，登录名显示为 null（前端标注「已删除」）。
- * LIMIT/OFFSET 在 MySQL 与 SQLite 同形，无需 databaseId 分流。
+ * LIMIT/OFFSET 为 MySQL 标准写法。
  */
 @Mapper
 public interface AuditMapper {

@@ -10,7 +10,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
-/** 周报清单条目（report_items）。SQL 为双方言通用写法，MySQL/SQLite 均可执行。 */
+/** 周报清单条目（report_items）。SQL 为 MySQL 标准写法。 */
 @Mapper
 public interface ReportItemMapper {
 
@@ -41,7 +41,7 @@ public interface ReportItemMapper {
   @Select("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM report_items WHERE report_id = #{reportId}")
   int nextSort(@Param("reportId") long reportId);
 
-  /** updated_at 由 MySQL 的 ON UPDATE / SQLite 的 report_items_touch 触发器自动刷新。 */
+  /** updated_at 由列定义的 ON UPDATE CURRENT_TIMESTAMP 自动刷新。 */
   @Update("UPDATE report_items SET `done` = #{done} WHERE id = #{id}")
   int updateDone(@Param("id") long id, @Param("done") boolean done);
 
@@ -56,6 +56,6 @@ public interface ReportItemMapper {
   @Delete("DELETE FROM report_items WHERE id = #{id}")
   int delete(@Param("id") long id);
 
-  /** 自增主键回填：实现见 {@code mapper/ReportItemMapper.xml}（双方言 databaseId）。 */
+  /** 自增主键回填：实现见 {@code mapper/ReportItemMapper.xml}。 */
   long lastInsertId();
 }

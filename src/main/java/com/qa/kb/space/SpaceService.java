@@ -130,8 +130,8 @@ public class SpaceService {
     if (userMapper.findById(userId).isEmpty()) {
       throw ApiException.notFound("用户不存在");
     }
-    // 不做「先 insert 抓 DuplicateKeyException 再 update」：SQLite 约束错不被 Spring
-    // 翻译成该异常，两条路径在双方言下不等价，统一交给 mapper XML 的方言 upsert。
+    // 不做「先 insert 抓 DuplicateKeyException 再 update」：约束冲突统一交给 mapper XML 的
+    // ON DUPLICATE KEY upsert，一条语句完成首插与改角色。
     memberMapper.upsert(spaceId, userId, cleanRole);
     return memberMapper.listBySpace(spaceId).stream()
         .filter(member -> member.userId() == userId)

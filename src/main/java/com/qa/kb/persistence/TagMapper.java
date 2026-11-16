@@ -31,8 +31,7 @@ public interface TagMapper {
   List<TagCount> listByPage(@Param("pageId") long pageId);
 
   /**
-   * 幂等插入（MySQL {@code INSERT IGNORE} / SQLite {@code ON CONFLICT DO NOTHING}，方言在
-   * {@code mapper/TagMapper.xml}）：重复时不报错也不回填 id，
+   * 幂等插入（MySQL {@code INSERT IGNORE}，见 {@code mapper/TagMapper.xml}）：重复时不报错也不回填 id，
    * 调用方用 {@link #findIdByName(String)} 再取一次。
    */
   int upsert(@Param("name") String name);

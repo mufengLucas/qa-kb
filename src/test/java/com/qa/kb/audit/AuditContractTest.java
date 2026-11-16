@@ -20,13 +20,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import com.qa.kb.db.MySqlTestDatabase;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
- * 审计日志端到端契约（P2 Phase 2）：真实过滤链 + 拦截器 + 真实 SQLite。
+ * 审计日志端到端契约（P2 Phase 2）：真实过滤链 + 拦截器 + 真实 MySQL（一次性 schema）。
  *
  * <p>覆盖：写操作产生审计行、GET 不产生、登录失败留痕、非 ADMIN 读取 403、成员删除后审计保留。
  *
@@ -46,16 +47,7 @@ class AuditContractTest {
 
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry registry) {
-    String dbPath =
-        TEMP_DIR.resolve("kb-audit-test.db").toAbsolutePath().toString().replace('\\', '/');
-    registry.add(
-        "spring.datasource.url",
-        () ->
-            "jdbc:sqlite:"
-                + dbPath
-                + "?journal_mode=WAL&busy_timeout=5000&synchronous=NORMAL");
-    registry.add("spring.datasource.driver-class-name", () -> "org.sqlite.JDBC");
-    registry.add("spring.datasource.hikari.connection-init-sql", () -> "PRAGMA foreign_keys=ON");
+    MySqlTestDatabase.register(registry, "audit");
     registry.add("kb.seed.enabled", () -> "true");
     registry.add("kb.seed.demo", () -> "false");
     registry.add("kb.seed.admin-password", () -> ADMIN_PASSWORD);
