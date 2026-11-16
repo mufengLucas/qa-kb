@@ -209,3 +209,35 @@ CREATE TABLE IF NOT EXISTS audit_log (
   KEY idx_audit_created (created_at),
   KEY idx_audit_user (user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
+
+-- P2 Phase 4：用例管理与执行记录。
+-- 独立模块：只用 module 字段做归属与筛选，不关联空间与项目。
+CREATE TABLE IF NOT EXISTS test_cases (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  module VARCHAR(200) NOT NULL DEFAULT '',
+  title VARCHAR(200) NOT NULL,
+  precondition TEXT NOT NULL,
+  steps TEXT NOT NULL,
+  expected TEXT NOT NULL,
+  priority VARCHAR(10) NOT NULL DEFAULT 'P2',
+  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+  creator_id BIGINT NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  KEY idx_tc_module (module),
+  KEY idx_tc_status (status),
+  CONSTRAINT fk_tc_creator FOREIGN KEY (creator_id) REFERENCES users (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
+
+-- 执行记录：一次执行一条；用例删除后级联清理（执行历史随用例走）
+CREATE TABLE IF NOT EXISTS test_runs (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  case_id BIGINT NOT NULL,
+  result VARCHAR(10) NOT NULL,
+  note VARCHAR(1000) NOT NULL DEFAULT '',
+  executor_id BIGINT NOT NULL,
+  executed_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  KEY idx_tr_case (case_id, id),
+  CONSTRAINT fk_tr_case FOREIGN KEY (case_id) REFERENCES test_cases (id) ON DELETE CASCADE,
+  CONSTRAINT fk_tr_executor FOREIGN KEY (executor_id) REFERENCES users (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;

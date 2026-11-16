@@ -71,6 +71,9 @@
             <button class="tab" :class="{ active: tab === 'projects' }" @click="tab = 'projects'">
               项目进度
             </button>
+            <button class="tab" :class="{ active: tab === 'cases' }" @click="tab = 'cases'">
+              用例
+            </button>
             <button
               v-if="isAdmin"
               class="tab"
@@ -957,6 +960,320 @@
                   <span>{{ item.progress.done }} / {{ item.progress.total }} 项</span>
                   <span>{{ item.progress.percent }}%</span>
                 </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <!-- ======================================================== 用例 -->
+        <main v-else-if="tab === 'cases'" class="main wide">
+          <!-- 详情视图 -->
+          <div v-if="caseDetail">
+            <div class="page-head">
+              <div>
+                <h2>{{ caseDetail.title }}</h2>
+                <div class="sub">
+                  {{ caseDetail.module || '未分模块' }} · 优先级 {{ caseDetail.priority }}
+                  <span class="pill" :class="caseDetail.status === 'ACTIVE' ? 'ok' : ''">
+                    {{ caseDetail.status }}
+                  </span>
+                  <span v-if="caseDetail.lastResult">
+                    · 最近执行
+                    <span class="pill" :class="resultPill(caseDetail.lastResult)">
+                      {{ caseDetail.lastResult }}
+                    </span>
+                  </span>
+                </div>
+              </div>
+              <div class="actions">
+                <button v-if="canWrite" class="btn sm" @click="editCase(caseDetail)">编辑</button>
+                <button v-if="canWrite" class="btn sm danger" @click="deleteCase(caseDetail)">
+                  删除
+                </button>
+                <button class="btn sm ghost" @click="closeCase">返回用例列表</button>
+              </div>
+            </div>
+
+            <div class="grid-2" style="align-items: start">
+              <div class="card">
+                <h3>用例内容</h3>
+                <div class="field">
+                  <label>前置条件</label>
+                  <p class="pre-line">{{ caseDetail.precondition || '（无）' }}</p>
+                </div>
+                <div class="field">
+                  <label>操作步骤</label>
+                  <p class="pre-line">{{ caseDetail.steps || '（无）' }}</p>
+                </div>
+                <div class="field">
+                  <label>预期结果</label>
+                  <p class="pre-line">{{ caseDetail.expected || '（无）' }}</p>
+                </div>
+                <div class="divider" style="margin: 10px 0"></div>
+                <div class="muted small">
+                  创建人 {{ caseDetail.creatorName || caseDetail.creatorLogin || '已删除成员' }}
+                  · 创建于 {{ fmtTime(caseDetail.createdAt) }}
+                  · 更新于 {{ fmtTime(caseDetail.updatedAt) }}
+                </div>
+                <div class="muted small" style="margin-top: 4px">
+                  执行 {{ caseDetail.runCount }} 次 · 通过 {{ caseDetail.passCount }} · 失败
+                  {{ caseDetail.failCount }}
+                  <span v-if="caseDetail.lastRunAt"> · 最近 {{ fmtTime(caseDetail.lastRunAt) }}</span>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="row">
+                  <h3 style="margin: 0">执行记录</h3>
+                  <span class="spacer"></span>
+                  <span class="muted small">共 {{ caseRuns.length }} 条</span>
+                </div>
+
+                <div v-if="canWrite" class="row" style="margin-top: 12px">
+                  <select class="select" v-model="newRun.result" style="width: auto">
+                    <option value="PASS">PASS 通过</option>
+                    <option value="FAIL">FAIL 失败</option>
+                    <option value="BLOCKED">BLOCKED 阻塞</option>
+                    <option value="SKIPPED">SKIPPED 跳过</option>
+                  </select>
+                  <input
+                    class="input"
+                    style="flex: 1; min-width: 150px"
+                    v-model="newRun.note"
+                    maxlength="1000"
+                    placeholder="备注（可选）"
+                    @keyup.enter="addRun"
+                  />
+                  <button class="btn primary" :disabled="runBusy" @click="addRun">
+                    {{ runBusy ? '提交中…' : '记录执行' }}
+                  </button>
+                </div>
+
+                <div v-if="!caseRuns.length" class="empty">还没有执行记录</div>
+                <div v-else class="list" style="margin-top: 12px">
+                  <div v-for="run in caseRuns" :key="run.id" class="list-item">
+                    <div class="row">
+                      <span class="pill" :class="resultPill(run.result)">{{ run.result }}</span>
+                      <span class="muted small">
+                        {{ run.executorName || run.executorLogin || '已删除成员' }}
+                      </span>
+                      <span class="muted small">{{ fmtTime(run.executedAt) }}</span>
+                      <span class="spacer"></span>
+                      <button
+                        v-if="canWrite"
+                        class="btn sm danger"
+                        @click="deleteRun(run)"
+                      >
+                        删除
+                      </button>
+                    </div>
+                    <div
+                      v-if="run.note"
+                      class="muted small"
+                      style="margin-top: 6px; white-space: pre-wrap"
+                    >
+                      {{ run.note }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 列表视图 -->
+          <div v-else>
+            <div class="page-head">
+              <div>
+                <h2>用例</h2>
+                <div class="sub">
+                  按模块归属与筛选（不关联空间与项目）· 共 {{ caseTotal }} 条
+                </div>
+              </div>
+              <div class="actions">
+                <button v-if="canWrite" class="btn sm primary" @click="startNewCase">
+                  新建用例
+                </button>
+              </div>
+            </div>
+
+            <!-- 新建 / 编辑表单 -->
+            <div v-if="showCaseForm" class="card" style="margin-bottom: 16px">
+              <h3>{{ caseForm.id ? '编辑用例' : '新建用例' }}</h3>
+              <div class="grid-2">
+                <div class="field">
+                  <label>模块</label>
+                  <input
+                    class="input"
+                    v-model="caseForm.module"
+                    maxlength="200"
+                    placeholder="例如 登录 / 支付（可留空）"
+                  />
+                </div>
+                <div class="field">
+                  <label>标题 *</label>
+                  <input class="input" v-model="caseForm.title" maxlength="200" />
+                </div>
+                <div class="field">
+                  <label>优先级</label>
+                  <select class="select" v-model="caseForm.priority">
+                    <option value="P0">P0 最高</option>
+                    <option value="P1">P1 高</option>
+                    <option value="P2">P2 中（默认）</option>
+                    <option value="P3">P3 低</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>状态</label>
+                  <select class="select" v-model="caseForm.status">
+                    <option value="ACTIVE">ACTIVE 启用</option>
+                    <option value="ARCHIVED">ARCHIVED 归档</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label>前置条件</label>
+                <textarea
+                  class="textarea"
+                  style="min-height: 60px"
+                  v-model="caseForm.precondition"
+                  maxlength="5000"
+                ></textarea>
+              </div>
+              <div class="field">
+                <label>操作步骤</label>
+                <textarea
+                  class="textarea"
+                  style="min-height: 90px"
+                  v-model="caseForm.steps"
+                  maxlength="5000"
+                  placeholder="每步一行"
+                ></textarea>
+              </div>
+              <div class="field">
+                <label>预期结果</label>
+                <textarea
+                  class="textarea"
+                  style="min-height: 70px"
+                  v-model="caseForm.expected"
+                  maxlength="5000"
+                ></textarea>
+              </div>
+              <div class="row">
+                <button class="btn primary" :disabled="caseBusy" @click="saveCase">
+                  {{ caseBusy ? '保存中…' : '保存' }}
+                </button>
+                <button class="btn ghost" @click="showCaseForm = false">取消</button>
+              </div>
+            </div>
+
+            <!-- 筛选 + 列表 -->
+            <div class="card">
+              <div class="row">
+                <input
+                  class="input"
+                  style="flex: 1; min-width: 170px"
+                  v-model="caseQ"
+                  placeholder="搜索标题 / 模块 / 步骤"
+                />
+                <select
+                  class="select"
+                  style="width: auto"
+                  v-model="caseModule"
+                  @change="caseFilterChanged"
+                >
+                  <option value="">全部模块</option>
+                  <option v-for="m in caseModuleOptions" :key="m" :value="m">{{ m }}</option>
+                </select>
+                <select
+                  class="select"
+                  style="width: auto"
+                  v-model="caseStatus"
+                  @change="caseFilterChanged"
+                >
+                  <option value="">全部状态</option>
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="ARCHIVED">ARCHIVED</option>
+                </select>
+                <button class="btn sm" @click="caseFilterChanged">查询</button>
+                <button class="btn sm ghost" @click="resetCaseFilters">重置</button>
+              </div>
+
+              <table class="table" style="margin-top: 12px">
+                <thead>
+                  <tr>
+                    <th>标题</th>
+                    <th style="width: 140px">模块</th>
+                    <th style="width: 70px">优先级</th>
+                    <th style="width: 90px">状态</th>
+                    <th style="width: 170px">执行统计</th>
+                    <th style="width: 150px">最近结果</th>
+                    <th style="width: 180px">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in cases" :key="item.id">
+                    <td>
+                      <b class="case-link" @click="openCase(item)">{{ item.title }}</b>
+                    </td>
+                    <td class="muted">{{ item.module || '—' }}</td>
+                    <td>
+                      <span class="pill" :class="priorityPill(item.priority)">
+                        {{ item.priority }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="pill" :class="item.status === 'ACTIVE' ? 'ok' : ''">
+                        {{ item.status }}
+                      </span>
+                    </td>
+                    <td class="muted small">
+                      执行 {{ item.runCount }} · 通过 {{ item.passCount }} · 失败
+                      {{ item.failCount }}
+                    </td>
+                    <td>
+                      <span
+                        v-if="item.lastResult"
+                        class="pill"
+                        :class="resultPill(item.lastResult)"
+                      >
+                        {{ item.lastResult }}
+                      </span>
+                      <span v-else class="muted small">未执行</span>
+                      <div v-if="item.lastRunAt" class="muted small" style="margin-top: 2px">
+                        {{ fmtTime(item.lastRunAt) }}
+                      </div>
+                    </td>
+                    <td>
+                      <button class="btn sm" @click="openCase(item)">详情</button>
+                      <button v-if="canWrite" class="btn sm" @click="editCase(item)">编辑</button>
+                      <button v-if="canWrite" class="btn sm danger" @click="deleteCase(item)">
+                        删除
+                      </button>
+                    </td>
+                  </tr>
+                  <tr v-if="!cases.length">
+                    <td colspan="7">
+                      <div class="empty">{{ caseBusy ? '加载中…' : '没有匹配的用例' }}</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div v-if="caseTotal > caseLimit" class="row" style="margin-top: 12px">
+                <span class="muted small">
+                  第 {{ casePage + 1 }} / {{ casePages }} 页 · 共 {{ caseTotal }} 条
+                </span>
+                <span class="spacer"></span>
+                <button class="btn sm" :disabled="casePage <= 0" @click="casePagePrev">
+                  上一页
+                </button>
+                <button
+                  class="btn sm"
+                  :disabled="casePage >= casePages - 1"
+                  @click="casePageNext"
+                >
+                  下一页
+                </button>
               </div>
             </div>
           </div>

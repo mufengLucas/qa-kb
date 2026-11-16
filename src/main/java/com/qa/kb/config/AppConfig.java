@@ -18,12 +18,14 @@ import com.qa.kb.persistence.SessionMapper;
 import com.qa.kb.persistence.SpaceMapper;
 import com.qa.kb.persistence.SpaceMemberMapper;
 import com.qa.kb.persistence.TagMapper;
+import com.qa.kb.persistence.TestCaseMapper;
 import com.qa.kb.persistence.UserMapper;
 import com.qa.kb.project.ProjectService;
 import com.qa.kb.report.ReportService;
 import com.qa.kb.search.SearchService;
 import com.qa.kb.space.SpaceAccessService;
 import com.qa.kb.space.SpaceService;
+import com.qa.kb.testcase.TestCaseService;
 import com.qa.kb.user.UserService;
 import com.qa.kb.web.AuditInterceptor;
 import java.time.Clock;
@@ -118,6 +120,12 @@ public class AppConfig {
   @Bean
   public ProjectService projectService(ProjectMapper projectMapper, Clock clock) {
     return new ProjectService(projectMapper, clock);
+  }
+
+  /** P2 Phase 4：用例管理与执行记录（独立模块，仅 module 字段归属）。 */
+  @Bean
+  public TestCaseService testCaseService(TestCaseMapper testCaseMapper) {
+    return new TestCaseService(testCaseMapper);
   }
 
   @Bean

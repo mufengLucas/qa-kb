@@ -8,7 +8,8 @@
 - **周报**：个人周报（草稿、提交）、本周清单（关联项目任务）、团队周报、未提交名单
 - **项目进度**：项目 / 里程碑 / 任务，进度按「已完成任务 / 总任务」自动计算
 
-另外包含成员与角色管理（ADMIN / MEMBER / VIEWER）、每日自动备份和管理员手动备份。
+另外包含成员与角色管理（ADMIN / MEMBER / VIEWER）、页面附件、操作审计、空间级权限、
+用例管理与执行记录（P2 Phase 1~4），以及每日自动备份和管理员手动备份。
 
 技术栈刻意保持轻量，**前端不需要 Node.js，也不需要 Redis、Elasticsearch**；唯一的外部依赖是数据库——**只支持 MySQL**（本机用 Docker 起一个即可）：
 
@@ -146,6 +147,19 @@ netsh advfirewall firewall add rule name="QA-KB 8787" dir=in action=allow protoc
 
 **操作审计**（P2 Phase 2）：关键写操作与登录留痕进 `audit_log`，ADMIN 在「成员 → 操作审计」分页查看。
 
+### 2.5 用例管理与执行记录（P2 Phase 4）
+
+- **独立模块**：用例只靠 `module` 字段归属与筛选，**不关联空间、不关联项目**。
+- 用例字段：模块 / 标题 / 前置条件 / 步骤 / 预期结果 / 优先级（`P0`~`P3`，默认 `P2`）/ 状态（`ACTIVE` / `ARCHIVED`，默认 `ACTIVE`）。
+- 「用例」页支持按模块下拉筛选、关键字搜索（LIKE，服务端 `!` 转义）、状态过滤与分页；
+  列表直接回显执行统计（执行次数 / 通过 / 失败 / 最近结果与时间）。
+- **执行记录**：详情里每次执行填结果（`PASS` / `FAIL` / `BLOCKED` / `SKIPPED`）与备注，
+  自动带执行人与执行时间，可单条删除。
+- 删除用例为**硬删除**，执行记录随外键 `ON DELETE CASCADE` 一并清理。
+- 读需登录，写需 ADMIN/MEMBER（全局规则，本模块无特殊配置）；写操作自动进操作审计（targetType = `test-cases`）。
+- 端点：`GET|POST /api/test-cases`、`GET|PUT|DELETE /api/test-cases/{id}`、
+  `GET|POST /api/test-cases/{id}/runs`、`DELETE /api/test-cases/{id}/runs/{runId}`。
+
 ---
 
 ## 3. 数据与备份
@@ -262,10 +276,10 @@ cd D:\qa-kb
   启动时 DROP + CREATE），因此不会污染生产库 `qa_kb`，用例之间也互不干扰。
 - 连接信息来自环境变量 `KB_DB_HOST` / `KB_DB_PORT` / `KB_DB_USER` / `KB_DB_PASSWORD`
   （缺 `KB_DB_PASSWORD` 时测试会直接报错并给出注入提示）。
-- 当前测试数：**420 个，全部通过**。
+- 当前测试数：**450 个，全部通过**。
 - 源码结构：
   - `src/main/java/com/qa/kb/web`：REST 接口
-  - `src/main/java/com/qa/kb/{page,space,report,project,user,search,backup}`：业务逻辑
+  - `src/main/java/com/qa/kb/{page,space,report,project,user,search,backup,testcase}`：业务逻辑
   - `src/main/java/com/qa/kb/persistence`：MyBatis Mapper
   - `src/main/resources/db/migration/V1__init.sql`：MySQL 建表脚本（`SchemaInitializer` 幂等执行）
   - `src/main/resources/static`：Vue 单页前端（`index.html` / `app.js` / `styles.css`）
@@ -303,5 +317,4 @@ cd D:\qa-kb
 
 ## 7. 尚未包含（P2）
 
-- 用例管理与执行记录
 - 邮件 / 企业微信通知

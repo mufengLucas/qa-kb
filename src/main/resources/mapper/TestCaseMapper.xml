@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qa.kb.persistence.TestCaseMapper">
+
+  <!-- 筛选条件：module / status 精确匹配，q 走 LIKE（pattern 由服务端预转义后绑定）。
+       ESCAPE 统一用 '!'：反斜杠在 MySQL 字符串里要写成 '\\' 才解析成 1 个字符，
+       '!' 是普通字符、无需转义，规则见 TestCaseService.likePattern。 -->
+  <sql id="filters">
+    <where>
+      <if test="module != null and module != ''">AND tc.module = #{module}</if>
+      <if test="status != null and status != ''">AND tc.status = #{status}</if>
+      <if test="pattern != null and pattern != ''">
+        AND (tc.title LIKE #{pattern} ESCAPE '!'
+          OR tc.module LIKE #{pattern} ESCAPE '!'
+          OR tc.steps LIKE #{pattern} ESCAPE '!')
+      </if>
+    </where>
+  </sql>
+
+  <select id="count" resultType="int">
+    SELECT COUNT(*)
+    FROM test_cases tc
+    <include refid="filters"/>
+  </select>
+
+  <!-- 统计列是相关子查询：一次查询同时拿到执行次数 / 通过失败数 / 最近一次结果。
+       creator 走 LEFT JOIN：创建人被删除后用例仍在，登录名显示为 null。 -->
+  <sql id="caseColumns">
+    tc.id,
+    tc.module,
+    tc.title,
+    tc.precondition,
+    tc.steps,
+    tc.expected,
+    tc.priority,
+    tc.status,
+    tc.creator_id,
+    tc.created_at,
+    tc.updated_at,
+    u.login AS creator_login,
+    u.name AS creator_name,
+    (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id) AS run_count,
+    (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id AND r.result = 'PASS') AS pass_count,
+    (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id AND r.result = 'FAIL') AS fail_count,
+    (SELECT r.result FROM test_runs r WHERE r.case_id = tc.id ORDER BY r.id DESC LIMIT 1) AS last_result,
+    (SELECT r.executed_at FROM test_runs r WHERE r.case_id = tc.id ORDER BY r.id DESC LIMIT 1) AS last_run_at
+  </sql>
+
+  <select id="page" resultType="com.qa.kb.model.TestCaseView">
+    SELECT
+    <include refid="caseColumns"/>
+    FROM test_cases tc
+    LEFT JOIN users u ON u.id = tc.creator_id
+    <include refid="filters"/>
+    ORDER BY tc.id DESC
+    LIMIT #{limit} OFFSET #{offset}
+  </select>
+
+  <select id="findViewById" resultType="com.qa.kb.model.TestCaseView">
+    SELECT
+    <include refid="caseColumns"/>
+    FROM test_cases tc
+    LEFT JOIN users u ON u.id = tc.creator_id
+    WHERE tc.id = #{id}
+  </select>
+
+  <!-- 自增主键回填：MySQL LAST_INSERT_ID() -->
+  <select id="lastInsertId" resultType="long">
+    SELECT LAST_INSERT_ID()
+  </select>
+</mapper>

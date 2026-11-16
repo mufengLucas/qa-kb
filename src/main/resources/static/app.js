@@ -320,6 +320,33 @@
         auditTotal: 0,
         auditBusy: false,
         auditLoaded: false,
+
+        /* 用例与执行记录（P2 Phase 4） */
+        cases: [],
+        caseTotal: 0,
+        caseModules: [],
+        caseQ: "",
+        caseModule: "",
+        caseStatus: "",
+        caseLimit: 20,
+        casePage: 0,
+        casesLoaded: false,
+        caseBusy: false,
+        caseDetail: null,
+        caseRuns: [],
+        showCaseForm: false,
+        caseForm: {
+          id: null,
+          module: "",
+          title: "",
+          precondition: "",
+          steps: "",
+          expected: "",
+          priority: "P2",
+          status: "ACTIVE",
+        },
+        newRun: { result: "PASS", note: "" },
+        runBusy: false,
       };
     },
 
@@ -387,6 +414,14 @@
       doneCount() {
         return this.doneItems.length;
       },
+      /** 用例列表总页数（至少 1 页）。 */
+      casePages() {
+        return Math.max(1, Math.ceil(this.caseTotal / this.caseLimit));
+      },
+      /** 模块下拉：接口返回的全部已用模块（空串 = 未分模块，跳过）。 */
+      caseModuleOptions() {
+        return (this.caseModules || []).filter((m) => m);
+      },
     },
 
     watch: {
@@ -407,6 +442,18 @@
         if (value === "members" && this.isAdmin && !this.auditLoaded) {
           this.loadAudit();
         }
+        // 进入用例页且首次可见时懒加载列表
+        if (value === "cases" && !this.casesLoaded) {
+          this.loadCases();
+        }
+      },
+      caseQ() {
+        // 与知识库搜索一致的防抖：停手 300ms 后才发请求
+        clearTimeout(this._caseTimer);
+        this._caseTimer = setTimeout(() => {
+          this.casePage = 0;
+          this.loadCases();
+        }, 300);
       },
     },
 
@@ -1345,6 +1392,186 @@
         }
       },
 
+      /* -------------------------------------------------------------- 用例（P2 Phase 4） */
+      async loadCases() {
+        this.caseBusy = true;
+        try {
+          const params = new URLSearchParams();
+          const q = (this.caseQ || "").trim();
+          if (q) {
+            params.set("q", q);
+          }
+          if (this.caseModule) {
+            params.set("module", this.caseModule);
+          }
+          if (this.caseStatus) {
+            params.set("status", this.caseStatus);
+          }
+          params.set("limit", String(this.caseLimit));
+          params.set("offset", String(this.casePage * this.caseLimit));
+          const data = await api("GET", "/api/test-cases?" + params.toString());
+          this.cases = (data && data.items) || [];
+          this.caseTotal = (data && data.total) || 0;
+          this.caseModules = (data && data.modules) || [];
+          this.casesLoaded = true;
+        } catch (error) {
+          this.fail(error);
+        } finally {
+          this.caseBusy = false;
+        }
+      },
+      caseFilterChanged() {
+        this.casePage = 0;
+        this.loadCases();
+      },
+      resetCaseFilters() {
+        this.caseQ = "";
+        this.caseModule = "";
+        this.caseStatus = "";
+        this.casePage = 0;
+        this.loadCases();
+      },
+      casePagePrev() {
+        if (this.casePage > 0) {
+          this.casePage -= 1;
+          this.loadCases();
+        }
+      },
+      casePageNext() {
+        if (this.casePage < this.casePages - 1) {
+          this.casePage += 1;
+          this.loadCases();
+        }
+      },
+      startNewCase() {
+        this.caseForm = {
+          id: null,
+          module: "",
+          title: "",
+          precondition: "",
+          steps: "",
+          expected: "",
+          priority: "P2",
+          status: "ACTIVE",
+        };
+        this.showCaseForm = true;
+      },
+      editCase(item) {
+        this.caseForm = {
+          id: item.id,
+          module: item.module || "",
+          title: item.title,
+          precondition: item.precondition || "",
+          steps: item.steps || "",
+          expected: item.expected || "",
+          priority: item.priority,
+          status: item.status,
+        };
+        this.showCaseForm = true;
+      },
+      async saveCase() {
+        const form = this.caseForm;
+        if (!(form.title || "").trim()) {
+          this.toast("请填写用例标题", "error");
+          return;
+        }
+        const payload = {
+          module: (form.module || "").trim(),
+          title: (form.title || "").trim(),
+          precondition: form.precondition || "",
+          steps: form.steps || "",
+          expected: form.expected || "",
+          priority: form.priority,
+          status: form.status,
+        };
+        this.caseBusy = true;
+        try {
+          if (form.id) {
+            await api("PUT", "/api/test-cases/" + form.id, payload);
+            this.toast("用例已更新");
+          } else {
+            await api("POST", "/api/test-cases", payload);
+            this.toast("用例已创建");
+          }
+          this.showCaseForm = false;
+          if (this.caseDetail && this.caseDetail.id === form.id) {
+            this.caseDetail = await api("GET", "/api/test-cases/" + form.id);
+          }
+          await this.loadCases();
+        } catch (error) {
+          this.fail(error);
+        } finally {
+          this.caseBusy = false;
+        }
+      },
+      async deleteCase(item) {
+        if (
+          !window.confirm(
+            "删除用例「" + item.title + "」？执行记录会一并删除，且不可恢复。"
+          )
+        ) {
+          return;
+        }
+        try {
+          await api("DELETE", "/api/test-cases/" + item.id);
+          this.toast("用例已删除");
+          if (this.caseDetail && this.caseDetail.id === item.id) {
+            this.closeCase();
+          }
+          await this.loadCases();
+        } catch (error) {
+          this.fail(error);
+        }
+      },
+      async openCase(item) {
+        try {
+          this.caseDetail = await api("GET", "/api/test-cases/" + item.id);
+          this.caseRuns = (await api("GET", "/api/test-cases/" + item.id + "/runs")) || [];
+          this.newRun = { result: "PASS", note: "" };
+        } catch (error) {
+          this.fail(error);
+        }
+      },
+      closeCase() {
+        this.caseDetail = null;
+        this.caseRuns = [];
+      },
+      async addRun() {
+        const detail = this.caseDetail;
+        if (!detail) {
+          return;
+        }
+        this.runBusy = true;
+        try {
+          await api("POST", "/api/test-cases/" + detail.id + "/runs", {
+            result: this.newRun.result,
+            note: (this.newRun.note || "").trim(),
+          });
+          this.toast("已记录一次执行");
+          this.newRun = { result: this.newRun.result, note: "" };
+          await this.openCase(detail);
+          await this.loadCases();
+        } catch (error) {
+          this.fail(error);
+        } finally {
+          this.runBusy = false;
+        }
+      },
+      async deleteRun(run) {
+        const detail = this.caseDetail;
+        if (!detail || !window.confirm("删除这条执行记录？")) {
+          return;
+        }
+        try {
+          await api("DELETE", "/api/test-cases/" + detail.id + "/runs/" + run.id);
+          this.caseRuns = this.caseRuns.filter((r) => r.id !== run.id);
+          await this.openCase(detail);
+          await this.loadCases();
+        } catch (error) {
+          this.fail(error);
+        }
+      },
+
       /* ---------------------------------------------------------------- 展示辅助 */
       taskStatusLabel(status) {
         return TASK_STATUS[status] || status;
@@ -1367,6 +1594,36 @@
       },
       projectStatusOptions() {
         return PROJECT_STATUS_OPTIONS;
+      },
+      /** 执行结果 → pill 样式（PASS 绿 / FAIL 红 / BLOCKED 橙 / SKIPPED 灰）。 */
+      resultPill(result) {
+        if (result === "PASS") {
+          return "ok";
+        }
+        if (result === "FAIL") {
+          return "danger";
+        }
+        if (result === "BLOCKED") {
+          return "warn";
+        }
+        return "";
+      },
+      /** 用例优先级 → pill 样式（P0 红 / P1 橙 / 其余灰）。 */
+      priorityPill(priority) {
+        if (priority === "P0") {
+          return "danger";
+        }
+        if (priority === "P1") {
+          return "warn";
+        }
+        return "";
+      },
+      /** LocalDateTime 序列化成 `2026-11-16T01:12:13`，展示时把 T 换成空格。 */
+      fmtTime(value) {
+        if (!value) {
+          return "";
+        }
+        return String(value).replace("T", " ").slice(0, 16);
       },
     },
   };

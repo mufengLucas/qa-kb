@@ -462,6 +462,23 @@ code {
   margin: 16px 0;
 }
 
+/* 用例页（P2 Phase 4） */
+.case-link {
+  color: var(--brand);
+  cursor: pointer;
+}
+
+.case-link:hover {
+  text-decoration: underline;
+}
+
+.pre-line {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: var(--ink);
+}
+
 /* ---------------------------------------------------------------- 搜索 */
 .searchbar {
   display: flex;
