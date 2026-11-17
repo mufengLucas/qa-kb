@@ -305,7 +305,8 @@ cd D:\qa-kb
   - `src/main/java/com/qa/kb/{page,space,report,project,user,search,backup,testcase,notify}`：业务逻辑
   - `src/main/java/com/qa/kb/persistence`：MyBatis Mapper
   - `src/main/resources/db/migration/V1__init.sql`：MySQL 建表脚本（`SchemaInitializer` 幂等执行）
-  - `src/main/resources/static`：Vue 单页前端（`index.html` / `app.js` / `styles.css`）
+  - `src/main/resources/static`：Vue 单页前端（`index.html` / `app.js` / `styles.css`，
+    另有 `vendor/` 本地依赖、`favicon.svg`、模块说明 `README.md`；`app.js.bak` 为历史备份）
 
 ### 关于 Docker 文件
 
@@ -340,5 +341,17 @@ cd D:\qa-kb
 
 ## 7. 尚未包含（P2）
 
+> 完整的功能差距分析（对标 13 家主流 QA 工具、Top 10 路线图与明确不做清单）见
+> [`docs/market-qa-feature-gap.md`](docs/market-qa-feature-gap.md)。以下是代码核对后的缺口清单：
+
 - 邮件 / 企业微信**外发**通知（站内通知已实现，见 §2.6：目前只在系统内铃铛提醒，
   不会把消息发到邮箱或 IM）
+- 缺陷管理（无缺陷表、无状态流、无与用例/执行的关联）
+- 报表仪表盘（仅用例统计回显与项目进度%，无图表、无导出）
+- 用例 / 执行记录的导入导出（CSV/Excel）
+- 用例评论与 @提及（评审协作）
+- 需求追踪 RTM（用例不关联需求/项目，覆盖率视图无从谈起）
+- 测试计划与执行批次（Plan/Run：按迭代圈选用例、分配执行人、批次通过率）
+- 步骤级执行结果与执行截图（当前执行记录只有整体 result + note）
+- 开放 API Token / Webhook / CI 自动化结果回传（缓做，见调研报告 C1）
+- SSO / LDAP / MFA（缓做，见调研报告 C2）
