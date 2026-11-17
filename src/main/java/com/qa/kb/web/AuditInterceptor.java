@@ -47,6 +47,10 @@ public class AuditInterceptor implements HandlerInterceptor {
       if (!path.startsWith("/api/") || EXPLICIT_PATHS.contains(path)) {
         return;
       }
+      // 通知的标记已读只是个人收件箱状态（清红点），不是业务数据变更，进审计只会刷屏。
+      if (path.startsWith("/api/notifications")) {
+        return;
+      }
       SessionUser user = currentUser();
       auditService.record(
           user == null ? null : user.id(),

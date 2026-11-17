@@ -33,6 +33,12 @@
     return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
   }
 
+  /** 本地时间标签「YYYY-MM-DD HH:mm」，用于通知已读时间的即时回显。 */
+  function nowLabel() {
+    const d = new Date();
+    return isoDate(d) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
   /** 返回给定日期所在周的周一（周报以周一为周起始）。 */
   function mondayOf(date) {
     const d = date || new Date();
@@ -347,6 +353,12 @@
         },
         newRun: { result: "PASS", note: "" },
         runBusy: false,
+
+        /* 站内通知（P2 Phase 5） */
+        notifications: [],
+        notifUnread: 0,
+        notifOpen: false,
+        notifBusy: false,
       };
     },
 
@@ -459,6 +471,12 @@
 
     mounted() {
       this.boot();
+      // 点面板以外的地方收起通知下拉
+      document.addEventListener("click", this.onDocClick);
+    },
+
+    beforeUnmount() {
+      document.removeEventListener("click", this.onDocClick);
     },
 
     methods: {
@@ -503,6 +521,65 @@
           await this.loadUsers();
         }
         await this.loadReport();
+        await this.loadNotifications();
+      },
+
+      /* ---------------------------------------------------------------- 通知 */
+      async loadNotifications() {
+        try {
+          const data = await api("GET", "/api/notifications?limit=20");
+          this.notifications = (data && data.items) || [];
+          this.notifUnread = (data && data.unread) || 0;
+        } catch (error) {
+          // 通知是旁路功能：加载失败不打断主流程（会话过期仍由 boot/fail 统一处理）
+        }
+      },
+      toggleNotif() {
+        this.notifOpen = !this.notifOpen;
+        if (this.notifOpen) {
+          this.loadNotifications();
+        }
+      },
+      onDocClick(event) {
+        if (this.notifOpen && event.target.closest && !event.target.closest(".notif-wrap")) {
+          this.notifOpen = false;
+        }
+      },
+      async markAllNotifsRead() {
+        if (!this.notifUnread) {
+          return;
+        }
+        try {
+          await api("POST", "/api/notifications/read-all");
+          this.notifUnread = 0;
+          this.notifications = this.notifications.map((n) =>
+            n.readAt ? n : Object.assign({}, n, { readAt: nowLabel() })
+          );
+          this.toast("已全部标记为已读");
+        } catch (error) {
+          this.fail(error);
+        }
+      },
+      /** 打开一条通知：先标记已读（仅未读时），再按 refType 跳到对应页面。 */
+      async openNotif(n) {
+        this.notifOpen = false;
+        if (!n.readAt) {
+          try {
+            await api("POST", "/api/notifications/" + n.id + "/read");
+            this.notifUnread = Math.max(0, this.notifUnread - 1);
+            this.notifications = this.notifications.map((item) =>
+              item.id === n.id ? Object.assign({}, item, { readAt: nowLabel() }) : item
+            );
+          } catch (error) {
+            this.fail(error);
+          }
+        }
+        if (n.refType === "week") {
+          this.tab = "reports";
+        } else if (n.refType === "project" && n.refId) {
+          this.tab = "projects";
+          this.openProject(n.refId);
+        }
       },
       async doLogin() {
         const login = (this.loginForm.login || "").trim();

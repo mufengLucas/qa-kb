@@ -241,3 +241,22 @@ CREATE TABLE IF NOT EXISTS test_runs (
   CONSTRAINT fk_tr_case FOREIGN KEY (case_id) REFERENCES test_cases (id) ON DELETE CASCADE,
   CONSTRAINT fk_tr_executor FOREIGN KEY (executor_id) REFERENCES users (id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
+
+-- P2 Phase 5：站内通知（周报提醒 + 任务逾期）。
+-- dedup_key 与 user_id 组成唯一键做幂等：周报提醒 weekly:<周一>，任务逾期 overdue:<taskId>:<dueDate>，
+-- 每日扫描重复执行不会产生重复通知。收件人级联删除（人没了通知也没意义）。
+CREATE TABLE IF NOT EXISTS notifications (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  type VARCHAR(40) NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  body VARCHAR(500) NOT NULL DEFAULT '',
+  ref_type VARCHAR(40) NOT NULL DEFAULT '',
+  ref_id BIGINT NOT NULL DEFAULT 0,
+  dedup_key VARCHAR(200) NOT NULL,
+  read_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_notifications_dedup (user_id, dedup_key),
+  KEY idx_notifications_user (user_id, read_at, id),
+  CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;

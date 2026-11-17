@@ -83,6 +83,10 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers("/api/users/**", "/api/admin/**")
                     .hasRole("ADMIN")
+                    // 通知标记已读是个人收件箱状态，不是内容写入：VIEWER 也应能清掉自己的红点
+                    .requestMatchers(
+                        HttpMethod.POST, "/api/notifications/*/read", "/api/notifications/read-all")
+                    .authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/**")
                     .authenticated()
                     .requestMatchers("/api/**")

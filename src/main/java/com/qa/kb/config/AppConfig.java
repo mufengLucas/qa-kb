@@ -5,9 +5,11 @@ import com.qa.kb.auth.LoginRateLimiter;
 import com.qa.kb.attachment.AttachmentService;
 import com.qa.kb.audit.AuditService;
 import com.qa.kb.backup.BackupService;
+import com.qa.kb.notify.NotificationService;
 import com.qa.kb.page.PageService;
 import com.qa.kb.persistence.AttachmentMapper;
 import com.qa.kb.persistence.AuditMapper;
+import com.qa.kb.persistence.NotificationMapper;
 import com.qa.kb.persistence.PageMapper;
 import com.qa.kb.persistence.ProjectMapper;
 import com.qa.kb.persistence.ReportItemMapper;
@@ -126,6 +128,13 @@ public class AppConfig {
   @Bean
   public TestCaseService testCaseService(TestCaseMapper testCaseMapper) {
     return new TestCaseService(testCaseMapper);
+  }
+
+  /** P2 Phase 5：站内通知（周报提醒 + 任务逾期，每日扫描幂等生成）。 */
+  @Bean
+  public NotificationService notificationService(
+      NotificationMapper notificationMapper, ReportMapper reportMapper, Clock clock) {
+    return new NotificationService(notificationMapper, reportMapper, clock);
   }
 
   @Bean

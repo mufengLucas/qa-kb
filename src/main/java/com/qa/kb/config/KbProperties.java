@@ -12,6 +12,7 @@ public class KbProperties {
   private String uploadDir = "./data/uploads";
   private final Seed seed = new Seed();
   private final Backup backup = new Backup();
+  private final Notify notify = new Notify();
 
   public ZoneId zoneId() {
     return ZoneId.of(timezone);
@@ -47,6 +48,10 @@ public class KbProperties {
 
   public Backup getBackup() {
     return backup;
+  }
+
+  public Notify getNotify() {
+    return notify;
   }
 
   public static class Seed {
@@ -145,6 +150,28 @@ public class KbProperties {
 
     public void setOffsiteDir(String offsiteDir) {
       this.offsiteDir = offsiteDir;
+    }
+
+    public String getCron() {
+      return cron;
+    }
+
+    public void setCron(String cron) {
+      this.cron = cron;
+    }
+  }
+
+  /** 每日站内通知扫描（周报提醒 + 任务逾期），停用后手动触发的端点不受影响。 */
+  public static class Notify {
+    private boolean enabled = true;
+    private String cron = "0 0 9 * * *";
+
+    public boolean isEnabled() {
+      return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+      this.enabled = enabled;
     }
 
     public String getCron() {

@@ -160,6 +160,27 @@ netsh advfirewall firewall add rule name="QA-KB 8787" dir=in action=allow protoc
 - 端点：`GET|POST /api/test-cases`、`GET|PUT|DELETE /api/test-cases/{id}`、
   `GET|POST /api/test-cases/{id}/runs`、`DELETE /api/test-cases/{id}/runs/{runId}`。
 
+### 2.6 站内通知（P2 Phase 5）
+
+- 顶栏**铃铛**显示未读红点，点开下拉面板看最近 20 条；点一条即标记已读并跳到来源页
+  （周报提醒 → 「周报」页；任务逾期 → 「项目进度」并打开对应项目），面板内可「全部已读」。
+- 每天 **09:00**（Asia/Shanghai）自动扫描两类通知：
+  - **周报提醒**：本周（周一为周起始）还没提交周报的启用成员，每人一条——
+    与周报页「未提交名单」复用同一条 SQL，名单口径完全一致。
+  - **任务逾期**：通知启用的负责人；负责人未设置或已停用时回落到项目 owner，
+    两者都不可用则跳过。逾期判定与项目页「逾期」标记同源（`ProgressCalculator.isOverdue`），
+    SQL 只做粗筛、最终以它为准。
+- **幂等不刷屏**：`notifications` 表按 `(user_id, dedup_key)` 唯一键去重——
+  周报提醒 `weekly:<周一>` 每周每人一条，任务逾期 `overdue:<任务id>:<截止日>` 每个截止日一条；
+  重复扫描、服务重启补跑都不会产生重复行，任务改期后再次逾期会重新提醒。
+- **权限**：读需登录；标记已读只要求登录（VIEWER 也能清自己的红点），他人的通知一律 404；
+  手工扫描 `POST /api/notifications/scan` 按内容写权限走 ADMIN/MEMBER；
+  通知写操作属个人收件箱状态，**不进操作审计**。
+- 端点：`GET /api/notifications?limit=` → `{unread, items}`（未读在前、同状态最新在前）、
+  `POST /api/notifications/{id}/read`、`POST /api/notifications/read-all` → `{updated}`、
+  `POST /api/notifications/scan` → `{weeklyReminders, overdueTasks}`。
+- 调度可单独关闭：`KB_NOTIFY_ENABLED=false`（关掉后手工 scan 端点仍可用）。
+
 ---
 
 ## 3. 数据与备份
@@ -257,6 +278,8 @@ $env:KB_BACKUP_CRON='0 30 2 * * *'
 | `KB_BACKUP_KEEP` | `14` | 本地保留份数 |
 | `KB_BACKUP_OFFSITE_DIR` | 空 | 异地备份目录 / 网络共享 |
 | `KB_BACKUP_CRON` | `0 30 2 * * *` | 备份 cron（秒 分 时 日 月 周） |
+| `KB_NOTIFY_ENABLED` | `true` | 是否启用每日站内通知扫描（周报提醒 + 任务逾期） |
+| `KB_NOTIFY_CRON` | `0 0 9 * * *` | 通知扫描 cron（秒 分 时 日 月 周） |
 
 ---
 
@@ -276,10 +299,10 @@ cd D:\qa-kb
   启动时 DROP + CREATE），因此不会污染生产库 `qa_kb`，用例之间也互不干扰。
 - 连接信息来自环境变量 `KB_DB_HOST` / `KB_DB_PORT` / `KB_DB_USER` / `KB_DB_PASSWORD`
   （缺 `KB_DB_PASSWORD` 时测试会直接报错并给出注入提示）。
-- 当前测试数：**450 个，全部通过**。
+- 当前测试数：**466 个，全部通过**。
 - 源码结构：
   - `src/main/java/com/qa/kb/web`：REST 接口
-  - `src/main/java/com/qa/kb/{page,space,report,project,user,search,backup,testcase}`：业务逻辑
+  - `src/main/java/com/qa/kb/{page,space,report,project,user,search,backup,testcase,notify}`：业务逻辑
   - `src/main/java/com/qa/kb/persistence`：MyBatis Mapper
   - `src/main/resources/db/migration/V1__init.sql`：MySQL 建表脚本（`SchemaInitializer` 幂等执行）
   - `src/main/resources/static`：Vue 单页前端（`index.html` / `app.js` / `styles.css`）
@@ -317,4 +340,5 @@ cd D:\qa-kb
 
 ## 7. 尚未包含（P2）
 
-- 邮件 / 企业微信通知
+- 邮件 / 企业微信**外发**通知（站内通知已实现，见 §2.6：目前只在系统内铃铛提醒，
+  不会把消息发到邮箱或 IM）
