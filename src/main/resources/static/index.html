@@ -1157,9 +1157,48 @@
                 </div>
               </div>
               <div class="actions">
+                <button class="btn sm ghost" @click="exportCasesCsv">导出用例</button>
+                <button class="btn sm ghost" @click="exportRunsCsv">导出执行</button>
+                <label
+                  v-if="canWrite"
+                  class="btn sm"
+                  style="cursor: pointer"
+                  :style="{ opacity: caseBusy ? 0.6 : 1 }"
+                >
+                  {{ caseBusy ? '处理中…' : '导入 CSV' }}
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    style="display: none"
+                    :disabled="caseBusy"
+                    @change="importCasesFile"
+                  />
+                </label>
                 <button v-if="canWrite" class="btn sm primary" @click="startNewCase">
                   新建用例
                 </button>
+              </div>
+            </div>
+
+            <!-- 导入回执：成功条数 + 逐行错误（行号与 Excel 一致） -->
+            <div v-if="caseImportResult" class="card" style="margin-bottom: 16px">
+              <div class="row" style="gap: 8px">
+                <b>
+                  导入完成：新增 {{ caseImportResult.created }} 条
+                  <span v-if="caseImportResult.errors.length" style="color: var(--warn)">
+                    · {{ caseImportResult.errors.length }} 行有误（已跳过）
+                  </span>
+                </b>
+                <div class="spacer"></div>
+                <button class="btn sm ghost" @click="dismissCaseImport">知道了</button>
+              </div>
+              <div
+                v-for="err in caseImportResult.errors"
+                :key="err.row"
+                class="small"
+                style="color: var(--warn); margin-top: 6px"
+              >
+                第 {{ err.row }} 行：{{ err.message }}
               </div>
             </div>
 

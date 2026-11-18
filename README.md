@@ -159,6 +159,13 @@ netsh advfirewall firewall add rule name="QA-KB 8787" dir=in action=allow protoc
 - 读需登录，写需 ADMIN/MEMBER（全局规则，本模块无特殊配置）；写操作自动进操作审计（targetType = `test-cases`）。
 - 端点：`GET|POST /api/test-cases`、`GET|PUT|DELETE /api/test-cases/{id}`、
   `GET|POST /api/test-cases/{id}/runs`、`DELETE /api/test-cases/{id}/runs/{runId}`。
+- **CSV 导入导出（A1）**：
+  - `GET /api/test-cases/export?module=&q=&status=`：按当前筛选全量导出用例（不分页），
+    UTF-8 BOM + RFC 5987 文件名，Excel/WPS 双击打开不乱码；
+  - `GET /api/test-cases/runs/export`：执行记录全量导出（一行一条执行，带用例模块/标题与执行人）；
+  - `POST /api/test-cases/import`（multipart 字段 `file`）：表头按列名映射（顺序不限、缺列按空值），
+    **合法行入库、坏行逐条回执不整体失败**（回执行号含表头，与 Excel 一致），单次上限 2000 行，
+    表头缺 `title` 或空文件整体 400。读端点登录即可，导入属写操作需 ADMIN/MEMBER（VIEWER 403）。
 
 ### 2.6 站内通知（P2 Phase 5）
 
@@ -299,7 +306,7 @@ cd D:\qa-kb
   启动时 DROP + CREATE），因此不会污染生产库 `qa_kb`，用例之间也互不干扰。
 - 连接信息来自环境变量 `KB_DB_HOST` / `KB_DB_PORT` / `KB_DB_USER` / `KB_DB_PASSWORD`
   （缺 `KB_DB_PASSWORD` 时测试会直接报错并给出注入提示）。
-- 当前测试数：**466 个，全部通过**。
+- 当前测试数：**482 个，全部通过**。
 - 源码结构：
   - `src/main/java/com/qa/kb/web`：REST 接口
   - `src/main/java/com/qa/kb/{page,space,report,project,user,search,backup,testcase,notify}`：业务逻辑
@@ -348,7 +355,6 @@ cd D:\qa-kb
   不会把消息发到邮箱或 IM）
 - 缺陷管理（无缺陷表、无状态流、无与用例/执行的关联）
 - 报表仪表盘（仅用例统计回显与项目进度%，无图表、无导出）
-- 用例 / 执行记录的导入导出（CSV/Excel）
 - 用例评论与 @提及（评审协作）
 - 需求追踪 RTM（用例不关联需求/项目，覆盖率视图无从谈起）
 - 测试计划与执行批次（Plan/Run：按迭代圈选用例、分配执行人、批次通过率）

@@ -3,8 +3,10 @@ package com.qa.kb.testcase;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -14,6 +16,7 @@ import com.qa.kb.db.MySqlTestDatabase;
 import com.qa.kb.security.SessionAuthenticationFilter;
 import jakarta.servlet.http.Cookie;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -24,6 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -282,12 +286,139 @@ class TestCaseContractTest {
     assertThat(updated.path("targetId").asText()).isEqualTo(String.valueOf(id));
   }
 
+  /* ------------------------------------------------------ 导入导出（A1） */
+
+  @Test
+  @DisplayName("导出用例：BOM + 表头 + 按筛选命中，文件名走 RFC 5987")
+  void exportCasesCsv() throws Exception {
+    Cookie admin = loginAsAdmin();
+    Cookie csrf = freshCsrfCookie();
+    createCase(admin, csrf, "导出模块", "导出用例A", "P1", null);
+    createCase(admin, csrf, "导出模块", "导出用例B", null, "ARCHIVED");
+    createCase(admin, csrf, "别的模块", "不该出现的用例", null, null);
+
+    MvcResult result =
+        mvc.perform(get("/api/test-cases/export").param("module", "导出模块").cookie(admin))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("attachment")))
+            .andReturn();
+
+    String body = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
+    assertThat(body.charAt(0))
+        .as("首字符必须是 UTF-8 BOM，Excel 打开不乱码")
+        .isEqualTo('\uFEFF');
+    String[] lines = body.substring(1).split("\r\n");
+    assertThat(lines[0]).isEqualTo("module,title,precondition,steps,expected,priority,status");
+    assertThat(lines).hasSize(3);
+    assertThat(lines[1]).contains("导出用例A").contains(",P1,");
+    assertThat(lines[2]).contains("导出用例B").endsWith(",ARCHIVED");
+    assertThat(body).doesNotContain("不该出现的用例");
+
+    // 筛选值非法同样 400（与列表一致）
+    mvc.perform(get("/api/test-cases/export").param("status", "RUNNING").cookie(admin))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("导出执行：一行一条执行，带用例模块/标题与执行人")
+  void exportRunsCsv() throws Exception {
+    Cookie admin = loginAsAdmin();
+    Cookie csrf = freshCsrfCookie();
+    long id = createCase(admin, csrf, "执行导出", "执行导出用例", null, null);
+    recordRun(admin, csrf, id, "PASS", "冒烟通过");
+    recordRun(admin, csrf, id, "FAIL", "环境不可用");
+
+    MvcResult result =
+        mvc.perform(get("/api/test-cases/runs/export").cookie(admin))
+            .andExpect(status().isOk())
+            .andReturn();
+
+    String body = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
+    String[] lines = body.substring(1).split("\r\n");
+    assertThat(lines[0])
+        .isEqualTo("module,title,result,note,executorLogin,executorName,executedAt");
+    assertThat(lines).hasSize(3);
+    assertThat(lines[1]).contains("执行导出用例").contains(",PASS,").contains(",admin,");
+    assertThat(lines[2]).contains(",FAIL,").contains("环境不可用");
+  }
+
+  @Test
+  @DisplayName("导入：合法行入库 + 坏行回执（行号含表头），VIEWER 导入 403")
+  void importCasesCsv() throws Exception {
+    Cookie admin = loginAsAdmin();
+    Cookie csrf = freshCsrfCookie();
+
+    String csv =
+        "module,title,priority\n"
+            + "导入模块,导入好用例,P1\n"
+            + ",  ,P2\n"
+            + "导入模块,导入坏优先级,P9\n";
+    JsonNode receipt = postImport(admin, csrf, csv);
+
+    assertThat(receipt.path("created").asInt())
+        .as("只有合法的第 2 行入库")
+        .isEqualTo(1);
+    assertThat(receipt.path("errors")).hasSize(2);
+    assertThat(receipt.path("errors").get(0).path("row").asInt())
+        .as("行号含表头：空标题在物理第 3 行")
+        .isEqualTo(3);
+    assertThat(receipt.path("errors").get(0).path("message").asText()).contains("用例标题");
+    assertThat(receipt.path("errors").get(1).path("row").asInt()).isEqualTo(4);
+
+    JsonNode page = query(admin, "q", "导入好用例");
+    assertThat(page.path("total").asInt())
+        .as("合法行确实落库")
+        .isEqualTo(1);
+    assertThat(page.path("items").get(0).path("priority").asText()).isEqualTo("P1");
+    assertThat(caseIds(query(admin, "q", "导入坏优先级"))).isEmpty();
+
+    // 表头缺 title → 整体 400；空文件 → 400
+    assertBadRequest(postImportRaw(admin, csrf, "module,priority\n登录,P1\n"), 400);
+    assertBadRequest(postImportRaw(admin, csrf, ""), 400);
+
+    // VIEWER 只读：导出能看，导入 403
+    createUser(admin, csrf, "impviewer", "ImpV1ew@2026", "VIEWER");
+    Cookie viewer = login("impviewer", "ImpV1ew@2026");
+    mvc.perform(get("/api/test-cases/export").cookie(viewer)).andExpect(status().isOk());
+    MockMultipartFile viewerFile =
+        new MockMultipartFile(
+            "file", "t.csv", "text/csv", "title\nx\n".getBytes(StandardCharsets.UTF_8));
+    mvc.perform(
+            multipart("/api/test-cases/import")
+                .file(viewerFile)
+                .cookie(viewer, csrf)
+                .header("X-XSRF-TOKEN", csrf.getValue()))
+        .andExpect(status().isForbidden());
+
+    // 未登录：导出 401
+    mvc.perform(get("/api/test-cases/export")).andExpect(status().isUnauthorized());
+  }
+
   /* --------------------------------------------------------------- helpers */
 
   private void assertBadRequest(MvcResult result, int expected) throws Exception {
     assertThat(result.getResponse().getStatus()).isEqualTo(expected);
   }
 
+  private JsonNode postImport(Cookie session, Cookie csrf, String csv) throws Exception {
+    MvcResult result = postImportRaw(session, csrf, csv);
+    assertThat(result.getResponse().getStatus()).isEqualTo(200);
+    return readTree(result);
+  }
+
+  /** multipart 导入原始响应（状态由调用方断言）。 */
+  private MvcResult postImportRaw(Cookie session, Cookie csrf, String csv) throws Exception {
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "file", "cases.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8));
+    return mvc
+        .perform(
+            multipart("/api/test-cases/import")
+                .file(file)
+                .cookie(session, csrf)
+                .header("X-XSRF-TOKEN", csrf.getValue()))
+        .andReturn();
+  }
   private MvcResult postCase(Cookie session, Cookie csrf, String body) throws Exception {
     return mvc
         .perform(

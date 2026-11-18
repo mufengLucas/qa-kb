@@ -1,11 +1,16 @@
 package com.qa.kb.testcase;
 
 import com.qa.kb.common.ApiException;
+import com.qa.kb.common.Csv;
+import com.qa.kb.model.TestCaseRunExportRow;
 import com.qa.kb.model.TestCaseRunRow;
 import com.qa.kb.model.TestCaseView;
 import com.qa.kb.persistence.TestCaseMapper;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +29,8 @@ public class TestCaseService {
   public static final int MAX_NOTE_LENGTH = 1000;
   public static final int DEFAULT_LIMIT = 50;
   public static final int MAX_LIMIT = 200;
+  /** 单次 CSV 导入的数据行上限（不含表头），防一次拖库式大文件拖垮请求。 */
+  public static final int MAX_IMPORT_ROWS = 2000;
   public static final String DEFAULT_PRIORITY = "P2";
   public static final String DEFAULT_STATUS = "ACTIVE";
 
@@ -47,15 +54,13 @@ public class TestCaseService {
    * （服务端先转义通配符，避免用户输入的 {@code %} 变成全表匹配）。
    */
   public CasePage list(String module, String q, String status, Integer limit, Integer offset) {
-    String cleanModule = module == null ? "" : requireOptional(module, MAX_MODULE_LENGTH, "模块");
-    String cleanStatus = status == null || status.isBlank() ? "" : normalizeStatus(status);
-    String pattern = q == null || q.isBlank() ? null : likePattern(q);
+    Filters f = filters(module, q, status);
     int cleanLimit = limit == null ? DEFAULT_LIMIT : Math.max(1, Math.min(MAX_LIMIT, limit));
     int cleanOffset = offset == null ? 0 : Math.max(0, offset);
 
-    int total = testCaseMapper.count(cleanModule, cleanStatus, pattern);
+    int total = testCaseMapper.count(f.module(), f.status(), f.pattern());
     List<TestCaseView> items =
-        testCaseMapper.page(cleanModule, cleanStatus, pattern, cleanLimit, cleanOffset);
+        testCaseMapper.page(f.module(), f.status(), f.pattern(), cleanLimit, cleanOffset);
     return new CasePage(total, items, testCaseMapper.listModules());
   }
 
@@ -65,6 +70,100 @@ public class TestCaseService {
 
   public List<String> modules() {
     return testCaseMapper.listModules();
+  }
+
+  /* ------------------------------------------------------------ 导入导出（A1） */
+
+  /** 导出结果行：命中总数与列表同一套筛选，但不分页（导出即全量）。 */
+  public List<TestCaseView> exportCases(String module, String q, String status) {
+    Filters filters = filters(module, q, status);
+    return testCaseMapper.exportCases(filters.module(), filters.status(), filters.pattern());
+  }
+
+  /** 执行记录导出：一行一条执行，带用例模块与标题（跨用例全量，按执行 id 升序）。 */
+  public List<TestCaseRunExportRow> exportRuns() {
+    return testCaseMapper.exportRuns();
+  }
+
+  /** 导入回执：成功条数 + 逐行错误（行号含表头，与用户在 Excel 里看到的行号一致）。 */
+  public record ImportResult(int created, List<RowError> errors) {}
+
+  /** 一行导入失败：{@code row} 是 CSV 里的物理行号（表头为第 1 行）。 */
+  public record RowError(int row, String message) {}
+
+  /**
+   * CSV 导入：表头按列名映射（顺序不限、缺列按空值），逐行校验——合法行插入、
+   * 非法行收集回执，**不因个别坏行整体失败**（迁入场景常见「几十行里夹两行坏数据」）。
+   *
+   * <p>表头必须含 {@code title}（其余列可缺省）；整段没有数据行、或超过 {@link
+   * #MAX_IMPORT_ROWS} 行则整体 400。
+   */
+  @Transactional
+  public ImportResult importCases(String content, long creatorId) {
+    List<List<String>> records = Csv.parse(content);
+    if (records.isEmpty()) {
+      throw new IllegalArgumentException("CSV 内容为空");
+    }
+    Map<String, Integer> header = headerIndex(records.get(0));
+    if (!header.containsKey("title")) {
+      throw new IllegalArgumentException("CSV 表头缺少 title 列（首行须为表头）");
+    }
+    int dataRows = records.size() - 1;
+    if (dataRows > MAX_IMPORT_ROWS) {
+      throw new IllegalArgumentException("单次最多导入 " + MAX_IMPORT_ROWS + " 行，当前 " + dataRows + " 行");
+    }
+    int created = 0;
+    List<RowError> errors = new ArrayList<>();
+    for (int i = 1; i < records.size(); i++) {
+      List<String> row = records.get(i);
+      if (row.stream().allMatch(String::isBlank)) {
+        continue; // 尾部空行不计错
+      }
+      int line = i + 1; // 物理行号：表头占第 1 行
+      try {
+        create(
+            cell(row, header, "module"),
+            cell(row, header, "title"),
+            cell(row, header, "precondition"),
+            cell(row, header, "steps"),
+            cell(row, header, "expected"),
+            cell(row, header, "priority"),
+            cell(row, header, "status"),
+            creatorId);
+        created++;
+      } catch (IllegalArgumentException e) {
+        errors.add(new RowError(line, e.getMessage()));
+      }
+    }
+    return new ImportResult(created, errors);
+  }
+
+  /** 表头 → 列下标：列名去空白转小写，重复列取第一个。 */
+  private static Map<String, Integer> headerIndex(List<String> header) {
+    Map<String, Integer> index = new HashMap<>();
+    for (int i = 0; i < header.size(); i++) {
+      String name = header.get(i).strip().toLowerCase(Locale.ROOT);
+      if (!name.isEmpty()) {
+        index.putIfAbsent(name, i);
+      }
+    }
+    return index;
+  }
+
+  /** 按表头取单元格；列缺失或行太短都按空值（可选列缺省走服务端默认）。 */
+  private static String cell(List<String> row, Map<String, Integer> header, String column) {
+    Integer i = header.get(column);
+    return i == null || i >= row.size() ? "" : row.get(i);
+  }
+
+  /** 列表与导出共用的筛选清洗（module/status 精确、q 预转义 LIKE）。 */
+  private record Filters(String module, String status, String pattern) {}
+
+  private Filters filters(String module, String q, String status) {
+    String cleanModule = module == null ? "" : requireOptional(module, MAX_MODULE_LENGTH, "模块");
+    String cleanStatus = status == null || status.isBlank() ? "" : normalizeStatus(status);
+    String pattern = q == null || q.isBlank() ? null : likePattern(q);
+    return new Filters(cleanModule, cleanStatus, pattern);
   }
 
   /* ------------------------------------------------------------------ 写入 */

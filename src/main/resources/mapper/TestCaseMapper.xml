@@ -65,6 +65,34 @@
     WHERE tc.id = #{id}
   </select>
 
+  <!-- 导出（A1）：与 page 同一套筛选，但不带 LIMIT/OFFSET——导出即全量命中行。
+       creator 仍走 LEFT JOIN（与 page 一致），排序改 id 升序，导出文件顺序稳定可复现。 -->
+  <select id="exportCases" resultType="com.qa.kb.model.TestCaseView">
+    SELECT
+    <include refid="caseColumns"/>
+    FROM test_cases tc
+    LEFT JOIN users u ON u.id = tc.creator_id
+    <include refid="filters"/>
+    ORDER BY tc.id
+  </select>
+
+  <!-- 执行记录导出：一行一条执行，带用例模块/标题；按执行 id 升序（时间线顺序）。
+       不做筛选——执行记录导出定位是「全量留档」，与用例导出（可按筛选）语义不同。 -->
+  <select id="exportRuns" resultType="com.qa.kb.model.TestCaseRunExportRow">
+    SELECT
+      tc.module,
+      tc.title,
+      r.result,
+      r.note,
+      u.login AS executor_login,
+      u.name AS executor_name,
+      r.executed_at
+    FROM test_runs r
+    JOIN test_cases tc ON tc.id = r.case_id
+    LEFT JOIN users u ON u.id = r.executor_id
+    ORDER BY r.id
+  </select>
+
   <!-- 自增主键回填：MySQL LAST_INSERT_ID() -->
   <select id="lastInsertId" resultType="long">
     SELECT LAST_INSERT_ID()

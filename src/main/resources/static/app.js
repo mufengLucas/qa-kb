@@ -189,6 +189,47 @@
     return data;
   }
 
+  /**
+   * CSV 导出下载：GET 拿 blob，从 Content-Disposition 解析文件名（RFC 5987 的
+   * filename* 优先），再用临时 <a download> 触发浏览器下载。
+   */
+  async function downloadCsv(url) {
+    const response = await fetch(url, { credentials: "same-origin" });
+    if (!response.ok) {
+      let message = "导出失败（HTTP " + response.status + "）";
+      try {
+        const data = JSON.parse(await response.text());
+        if (data && (data.message || data.error)) {
+          message = data.message || data.error;
+        }
+      } catch (ignored) {
+        /* 非 JSON 错误体，用默认文案 */
+      }
+      const error = new Error(message);
+      error.status = response.status;
+      throw error;
+    }
+    const disposition = response.headers.get("Content-Disposition") || "";
+    let filename = "export.csv";
+    const star = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+    if (star) {
+      filename = decodeURIComponent(star[1]);
+    } else {
+      const plain = /filename="?([^";]+)"?/i.exec(disposition);
+      if (plain) {
+        filename = plain[1];
+      }
+    }
+    const href = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(href), 1000);
+  }
+
   function renderMarkdown(source) {
     const text = source || "";
     if (!window.marked) {
@@ -338,6 +379,7 @@
         casePage: 0,
         casesLoaded: false,
         caseBusy: false,
+        caseImportResult: null,
         caseDetail: null,
         caseRuns: [],
         showCaseForm: false,
@@ -1507,6 +1549,65 @@
         this.caseStatus = "";
         this.casePage = 0;
         this.loadCases();
+      },
+      /** 导出当前筛选命中的用例为 CSV（服务端全量，不分页）。 */
+      async exportCasesCsv() {
+        try {
+          const params = new URLSearchParams();
+          const q = (this.caseQ || "").trim();
+          if (q) {
+            params.set("q", q);
+          }
+          if (this.caseModule) {
+            params.set("module", this.caseModule);
+          }
+          if (this.caseStatus) {
+            params.set("status", this.caseStatus);
+          }
+          const suffix = params.toString();
+          await downloadCsv("/api/test-cases/export" + (suffix ? "?" + suffix : ""));
+          this.toast("用例已导出");
+        } catch (error) {
+          this.fail(error);
+        }
+      },
+      /** 导出全部执行记录（跨用例、按执行顺序）。 */
+      async exportRunsCsv() {
+        try {
+          await downloadCsv("/api/test-cases/runs/export");
+          this.toast("执行记录已导出");
+        } catch (error) {
+          this.fail(error);
+        }
+      },
+      /** 选中 CSV 后导入：回执（成功数 + 逐行错误）留在页面上，不只弹 toast。 */
+      async importCasesFile(event) {
+        const input = event.target;
+        const file = input.files && input.files[0];
+        if (!file) {
+          return;
+        }
+        this.caseBusy = true;
+        try {
+          const result = await upload("/api/test-cases/import", file);
+          this.caseImportResult = result || { created: 0, errors: [] };
+          const failed = (this.caseImportResult.errors || []).length;
+          this.toast(
+            failed
+              ? "导入完成：新增 " + this.caseImportResult.created + " 条，" + failed + " 行有误"
+              : "导入完成：新增 " + this.caseImportResult.created + " 条",
+            failed ? "error" : "ok"
+          );
+          await this.loadCases();
+        } catch (error) {
+          this.fail(error);
+        } finally {
+          this.caseBusy = false;
+          input.value = ""; // 允许再次选择同一个文件
+        }
+      },
+      dismissCaseImport() {
+        this.caseImportResult = null;
       },
       casePagePrev() {
         if (this.casePage > 0) {

@@ -23,12 +23,21 @@
 - `GET /api/test-cases?module=&q=&status=&limit=&offset=` → `{total, items, modules}`
 - `POST /api/test-cases`、`GET|PUT|DELETE /api/test-cases/{id}`
 - `GET|POST /api/test-cases/{id}/runs`、`DELETE /api/test-cases/{id}/runs/{runId}`
+- **CSV 导入导出（A1）**：
+  - `GET /api/test-cases/export?module=&q=&status=`：按筛选全量导出用例 CSV（不分页）
+  - `GET /api/test-cases/runs/export`：执行记录全量导出（带用例模块/标题与执行人）
+  - `POST /api/test-cases/import`（multipart `file`）：表头按列名映射，合法行入库、
+    坏行逐行回执不整体失败；单次 ≤ 2000 行，表头缺 `title` / 空文件整体 400
 
 读需登录，写需 ADMIN/MEMBER（SecurityConfig 全局规则，本模块无特殊配置）；
 写操作被 `AuditInterceptor` 自动留痕（targetType = `test-cases`）。
 
 ## 关键取舍
 
+- **CSV 自己写、不引第三方库**：只做 RFC 4180 的解析与序列化（引号字段、字段内换行、
+  `""` 转义、BOM 剥离），`common/Csv.java` 约 100 行可控可测，比为一个功能点引依赖更划算。
+- **导入逐行校验、坏行回执不整体失败**：迁入场景常见「几十行里夹两行坏数据」，
+  整体回滚会逼用户先手工修表；回执行号含表头，与用户在 Excel 里看到的行号一致。
 - **LIKE 转义符用 `!` 而非反斜杠**：反斜杠在 MySQL 字符串里要写成 `'\\'` 才解析成 1 个字符，
   `'!'` 是普通字符、无需转义，一条语句即可。见 `TestCaseService.likePattern`。
 - **统计走相关子查询**：`count` 与 `page` 共用同一段 `<where>`，一页查询拿到执行次数、

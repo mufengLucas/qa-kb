@@ -1,6 +1,7 @@
 package com.qa.kb.persistence;
 
 import com.qa.kb.model.TestCaseRow;
+import com.qa.kb.model.TestCaseRunExportRow;
 import com.qa.kb.model.TestCaseRunRow;
 import com.qa.kb.model.TestCaseView;
 import java.util.List;
@@ -45,6 +46,15 @@ public interface TestCaseMapper {
       @Param("module") String module,
       @Param("status") String status,
       @Param("pattern") String pattern);
+
+  /** 导出全量命中行（不分页），SQL 见 XML {@code exportCases}。 */
+  List<TestCaseView> exportCases(
+      @Param("module") String module,
+      @Param("status") String status,
+      @Param("pattern") String pattern);
+
+  /** 执行记录导出（跨用例全量、按执行 id 升序），SQL 见 XML {@code exportRuns}。 */
+  List<TestCaseRunExportRow> exportRuns();
 
   /** 自增主键回填，SQL 见 XML {@code lastInsertId}。 */
   long lastInsertId();

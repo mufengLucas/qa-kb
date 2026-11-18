@@ -1,5 +1,7 @@
 package com.qa.kb.web;
 
+import com.qa.kb.common.Csv;
+import com.qa.kb.model.TestCaseRunExportRow;
 import com.qa.kb.model.TestCaseRunRow;
 import com.qa.kb.model.TestCaseView;
 import com.qa.kb.security.CurrentUser;
@@ -8,8 +10,15 @@ import com.qa.kb.testcase.TestCaseService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,9 +30,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 用例管理与执行记录（P2 Phase 4）。
+ * 用例管理与执行记录（P2 Phase 4；A1 导入导出见 {@code /export} 与 {@code /import}）。
  *
  * <p>权限无特殊配置：SecurityConfig 已覆盖——读需登录，写需 ADMIN/MEMBER，VIEWER 写 403；
  * 写操作由 {@link AuditInterceptor} 统一留痕（targetType = {@code test-cases}）。
@@ -108,6 +118,87 @@ public class TestCaseController {
   public ResponseEntity<Void> delete(@PathVariable long id) {
     testCaseService.delete(id);
     return ResponseEntity.noContent().build();
+  }
+
+  /* ------------------------------------------------------------ 导入导出（A1） */
+
+  /**
+   * 用例导出 CSV：与列表同一套筛选（module/q/status），命中全量不分页。
+   * UTF-8 BOM + RFC 5987 文件名，Excel 双击打开不乱码。
+   */
+  @GetMapping("/test-cases/export")
+  public ResponseEntity<byte[]> exportCases(
+      @RequestParam(required = false) String module,
+      @RequestParam(required = false) String q,
+      @RequestParam(required = false) String status) {
+    List<TestCaseView> rows = testCaseService.exportCases(module, q, status);
+    StringBuilder csv = new StringBuilder();
+    csv.append(Csv.row("module", "title", "precondition", "steps", "expected", "priority", "status"))
+        .append("\r\n");
+    for (TestCaseView row : rows) {
+      csv.append(
+              Csv.row(
+                  row.module(),
+                  row.title(),
+                  row.precondition(),
+                  row.steps(),
+                  row.expected(),
+                  row.priority(),
+                  row.status()))
+          .append("\r\n");
+    }
+    return csvResponse("test-cases-" + LocalDate.now() + ".csv", csv.toString());
+  }
+
+  /** 执行记录导出 CSV：一行一条执行（跨用例全量），带用例模块/标题与执行人。 */
+  @GetMapping("/test-cases/runs/export")
+  public ResponseEntity<byte[]> exportRuns() {
+    List<TestCaseRunExportRow> rows = testCaseService.exportRuns();
+    StringBuilder csv = new StringBuilder();
+    csv.append(
+            Csv.row(
+                "module", "title", "result", "note", "executorLogin", "executorName", "executedAt"))
+        .append("\r\n");
+    DateTimeFormatter time = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    for (TestCaseRunExportRow row : rows) {
+      csv.append(
+              Csv.row(
+                  row.module(),
+                  row.title(),
+                  row.result(),
+                  row.note(),
+                  row.executorLogin(),
+                  row.executorName(),
+                  row.executedAt() == null ? "" : row.executedAt().format(time)))
+          .append("\r\n");
+    }
+    return csvResponse("test-case-runs-" + LocalDate.now() + ".csv", csv.toString());
+  }
+
+  /**
+   * CSV 导入（multipart 字段 {@code file}）：合法行入库、坏行逐条回执，不整体失败。
+   * 单次上限 {@link TestCaseService#MAX_IMPORT_ROWS} 行，超限或缺 title 表头整体 400。
+   */
+  @PostMapping("/test-cases/import")
+  public ResponseEntity<TestCaseService.ImportResult> importCases(
+      @RequestParam("file") MultipartFile file, Authentication authentication)
+      throws IOException {
+    SessionUser user = CurrentUser.require(authentication);
+    if (file == null || file.isEmpty()) {
+      throw new IllegalArgumentException("请选择要导入的 CSV 文件");
+    }
+    String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+    return ResponseEntity.ok(testCaseService.importCases(content, user.id()));
+  }
+
+  /** CSV 下载响应：UTF-8 BOM 前缀 + RFC 5987 文件名（Excel/WPS 中文文件名不乱码）。 */
+  private static ResponseEntity<byte[]> csvResponse(String filename, String body) {
+    byte[] bytes = ("\uFEFF" + body).getBytes(StandardCharsets.UTF_8);
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(new MediaType("text", "csv", StandardCharsets.UTF_8));
+    headers.setContentDisposition(
+        ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build());
+    return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
   }
 
   /* ------------------------------------------------------------ 执行记录 */
