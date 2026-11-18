@@ -6,6 +6,9 @@ import com.qa.kb.attachment.AttachmentService;
 import com.qa.kb.audit.AuditService;
 import com.qa.kb.backup.BackupService;
 import com.qa.kb.notify.NotificationService;
+import com.qa.kb.notify.outbound.EmailSender;
+import com.qa.kb.notify.outbound.OutboundNotifier;
+import com.qa.kb.notify.outbound.WebhookSender;
 import com.qa.kb.page.PageService;
 import com.qa.kb.persistence.AttachmentMapper;
 import com.qa.kb.persistence.AuditMapper;
@@ -135,6 +138,28 @@ public class AppConfig {
   public NotificationService notificationService(
       NotificationMapper notificationMapper, ReportMapper reportMapper, Clock clock) {
     return new NotificationService(notificationMapper, reportMapper, clock);
+  }
+
+  /** A2 外发通知：SMTP 邮件与通用 IM Webhook（不配置就不启用）。 */
+  @Bean
+  public EmailSender emailSender(KbProperties properties) {
+    return new EmailSender(properties);
+  }
+
+  @Bean
+  public WebhookSender webhookSender(KbProperties properties, Clock clock) {
+    return new WebhookSender(properties, clock);
+  }
+
+  /** 扫描后的外发汇总入口：只发增量、失败只记日志（永不向外抛）。 */
+  @Bean
+  public OutboundNotifier outboundNotifier(
+      KbProperties properties,
+      UserMapper userMapper,
+      EmailSender emailSender,
+      WebhookSender webhookSender,
+      Clock clock) {
+    return new OutboundNotifier(properties, userMapper, emailSender, webhookSender, clock);
   }
 
   @Bean

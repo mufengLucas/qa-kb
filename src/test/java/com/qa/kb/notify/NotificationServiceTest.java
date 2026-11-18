@@ -129,6 +129,13 @@ class NotificationServiceTest {
 
     assertThat(result.weeklyReminders()).isEqualTo(2);
     assertThat(result.overdueTasks()).isZero();
+    // A2 外发的原料：新增明细带上收件人与正文
+    assertThat(result.newNotices()).hasSize(2);
+    NotificationService.NewNotice first = result.newNotices().get(0);
+    assertThat(first.userId()).isEqualTo(2L);
+    assertThat(first.type()).isEqualTo(NotificationService.TYPE_WEEKLY_REPORT);
+    assertThat(first.title()).isEqualTo("周报提醒");
+    assertThat(first.body()).contains("周报尚未提交");
     verify(notificationMapper)
         .insertIfAbsent(
             eq(2L),
@@ -173,6 +180,9 @@ class NotificationServiceTest {
     NotificationService.ScanResult result = service.scan(MONDAY);
 
     assertThat(result.overdueTasks()).isEqualTo(1);
+    assertThat(result.newNotices()).hasSize(1);
+    assertThat(result.newNotices().get(0).userId()).isEqualTo(4L);
+    assertThat(result.newNotices().get(0).type()).isEqualTo(NotificationService.TYPE_TASK_OVERDUE);
     verify(notificationMapper)
         .insertIfAbsent(
             eq(4L),
@@ -248,5 +258,21 @@ class NotificationServiceTest {
     NotificationService.ScanResult result = service.scan(MONDAY);
 
     assertThat(result.weeklyReminders()).isZero();
+    assertThat(result.newNotices()).as("dedup 命中的不算新增，外发汇总不会重发").isEmpty();
+  }
+
+  @Test
+  @DisplayName("新增明细只收真正落库的：同批里 dedup 返回 0 的那条不进 ScanResult")
+  void newNoticesOnlyIncludeFreshInserts() {
+    when(reportMapper.missingUserIds(any())).thenReturn(List.of(2L, 3L));
+    when(notificationMapper.insertIfAbsent(
+            anyLong(), anyString(), anyString(), anyString(), anyString(), anyLong(), anyString()))
+        .thenReturn(1, 0);
+
+    NotificationService.ScanResult result = service.scan(MONDAY);
+
+    assertThat(result.weeklyReminders()).isEqualTo(1);
+    assertThat(result.newNotices()).hasSize(1);
+    assertThat(result.newNotices().get(0).userId()).isEqualTo(2L);
   }
 }

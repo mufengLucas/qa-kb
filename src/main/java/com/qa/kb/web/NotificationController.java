@@ -1,6 +1,7 @@
 package com.qa.kb.web;
 
 import com.qa.kb.notify.NotificationService;
+import com.qa.kb.notify.outbound.OutboundNotifier;
 import com.qa.kb.security.CurrentUser;
 import com.qa.kb.security.SessionUser;
 import java.time.Clock;
@@ -26,10 +27,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class NotificationController {
 
   private final NotificationService notificationService;
+  private final OutboundNotifier outboundNotifier;
   private final Clock clock;
 
-  public NotificationController(NotificationService notificationService, Clock clock) {
+  public NotificationController(
+      NotificationService notificationService, OutboundNotifier outboundNotifier, Clock clock) {
     this.notificationService = notificationService;
+    this.outboundNotifier = outboundNotifier;
     this.clock = clock;
   }
 
@@ -55,10 +59,17 @@ public class NotificationController {
     return Map.of("updated", notificationService.markAllRead(user.id()));
   }
 
-  /** 手工触发一次扫描（幂等，与调度器同一入口；测试与运维用）。 */
+  /**
+   * 手工触发一次扫描（幂等，与调度器同一入口；测试与运维用）。
+   *
+   * <p>与调度器一样，扫描出新增后会走 A2 外发汇总（通道未配置则静默跳过、
+   * 失败只记日志）——手工补扫出的通知同样能送达邮件/IM。
+   */
   @PostMapping("/scan")
   public NotificationService.ScanResult scan(Authentication authentication) {
     CurrentUser.require(authentication);
-    return notificationService.scan(LocalDate.now(clock));
+    NotificationService.ScanResult result = notificationService.scan(LocalDate.now(clock));
+    outboundNotifier.sendIfAny(result);
+    return result;
   }
 }

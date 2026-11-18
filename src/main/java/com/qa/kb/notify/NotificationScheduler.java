@@ -1,5 +1,7 @@
 package com.qa.kb.notify;
 
+import com.qa.kb.notify.NotificationService;
+import com.qa.kb.notify.outbound.OutboundNotifier;
 import java.time.Clock;
 import java.time.LocalDate;
 import org.slf4j.Logger;
@@ -22,10 +24,13 @@ public class NotificationScheduler {
   private static final Logger log = LoggerFactory.getLogger(NotificationScheduler.class);
 
   private final NotificationService notificationService;
+  private final OutboundNotifier outboundNotifier;
   private final Clock clock;
 
-  public NotificationScheduler(NotificationService notificationService, Clock clock) {
+  public NotificationScheduler(
+      NotificationService notificationService, OutboundNotifier outboundNotifier, Clock clock) {
     this.notificationService = notificationService;
+    this.outboundNotifier = outboundNotifier;
     this.clock = clock;
   }
 
@@ -33,10 +38,13 @@ public class NotificationScheduler {
   public void runDailyScan() {
     try {
       NotificationService.ScanResult result = notificationService.scan(LocalDate.now(clock));
+      // A2 外发：只发本次新增的汇总；sendIfAny 永不抛出，失败只记日志
+      outboundNotifier.sendIfAny(result);
       log.info(
-          "Daily notification scan finished: weekly={}, overdue={}",
+          "Daily notification scan finished: weekly={}, overdue={}, outboundNotices={}",
           result.weeklyReminders(),
-          result.overdueTasks());
+          result.overdueTasks(),
+          result.newNotices().size());
     } catch (RuntimeException e) {
       log.error("Daily notification scan failed: {}", e.getMessage(), e);
     }

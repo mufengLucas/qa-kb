@@ -69,6 +69,9 @@ class NotificationContractTest {
     // 测试库只有 admin 一个启用成员且没写过本周周报 → 首次扫描生成 1 条
     JsonNode first = postScan(admin, csrf);
     assertThat(first.path("weeklyReminders").asInt()).isEqualTo(1);
+    // A2 外发的原料也随响应返回：本次真正新增的明细
+    assertThat(first.path("newNotices").size()).isEqualTo(1);
+    assertThat(first.path("newNotices").get(0).path("type").asText()).isEqualTo("weekly_report");
 
     JsonNode inbox = getInbox(admin);
     assertThat(inbox.path("unread").asLong()).isEqualTo(1);
@@ -78,9 +81,10 @@ class NotificationContractTest {
     assertThat(latest.path("body").asText()).contains("周报尚未提交");
     assertThat(latest.path("readAt").isNull()).isTrue();
 
-    // 幂等：第二次扫描 0 条，收件箱仍只有 1 条
+    // 幂等：第二次扫描 0 条，收件箱仍只有 1 条，也没有可供外发的新增
     JsonNode second = postScan(admin, csrf);
     assertThat(second.path("weeklyReminders").asInt()).isZero();
+    assertThat(second.path("newNotices").size()).isZero();
     assertThat(getInbox(admin).path("items").size()).isEqualTo(1);
   }
 

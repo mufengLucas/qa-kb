@@ -7,6 +7,7 @@ public record UserRow(
     Long id,
     String login,
     String name,
+    String email,
     String passwordHash,
     Role role,
     boolean active,

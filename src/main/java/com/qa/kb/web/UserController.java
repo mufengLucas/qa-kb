@@ -5,6 +5,7 @@ import com.qa.kb.security.CurrentUser;
 import com.qa.kb.security.SessionUser;
 import com.qa.kb.user.UserService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.util.List;
@@ -29,10 +30,12 @@ public class UserController {
       @NotBlank String login,
       @NotBlank @Size(max = 100) String name,
       @NotBlank String password,
-      String role) {}
+      String role,
+      @Email @Size(max = 200) String email) {}
 
   public record UpdateUserRequest(
-      @NotBlank @Size(max = 100) String name, String role, Boolean active) {}
+      @NotBlank @Size(max = 100) String name, String role, Boolean active,
+      @Email @Size(max = 200) String email) {}
 
   public record ResetPasswordRequest(@NotBlank String newPassword) {}
 
@@ -50,7 +53,9 @@ public class UserController {
   @PostMapping
   public ResponseEntity<UserService.UserView> create(@Valid @RequestBody CreateUserRequest body) {
     return ResponseEntity.status(HttpStatus.CREATED)
-        .body(userService.create(body.login(), body.name(), body.password(), body.role()));
+        .body(
+            userService.create(
+                body.login(), body.name(), body.password(), body.role(), body.email()));
   }
 
   @PutMapping("/{id}")
@@ -58,7 +63,7 @@ public class UserController {
       @PathVariable long id, @Valid @RequestBody UpdateUserRequest body) {
     Role role = body.role() == null || body.role().isBlank() ? null : Role.parse(body.role());
     boolean active = body.active() == null || body.active();
-    return userService.update(id, body.name(), role, active);
+    return userService.update(id, body.name(), role, active, body.email());
   }
 
   @DeleteMapping("/{id}")

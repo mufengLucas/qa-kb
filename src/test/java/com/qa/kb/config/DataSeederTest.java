@@ -69,7 +69,7 @@ class DataSeederTest {
   }
 
   private static UserService.UserView userView(long id, String login) {
-    return new UserService.UserView(id, login, login, "MEMBER", true);
+    return new UserService.UserView(id, login, login, "", "MEMBER", true);
   }
 
   private static PageRow page(long id) {

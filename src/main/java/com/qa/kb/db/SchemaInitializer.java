@@ -45,6 +45,7 @@ public class SchemaInitializer implements ApplicationRunner {
       SqlScriptRunner.run(connection, "/db/migration/V1__init.sql");
       ensureColumn(connection, "projects", "deleted_at", "DATETIME(3) NULL");
       ensureColumn(connection, "spaces", "restricted", "TINYINT(1) NOT NULL DEFAULT 0");
+      ensureColumn(connection, "users", "email", "VARCHAR(200) NOT NULL DEFAULT ''");
       log.info("MySQL schema ready");
     }
   }

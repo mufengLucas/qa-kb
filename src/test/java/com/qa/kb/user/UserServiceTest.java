@@ -43,7 +43,7 @@ class UserServiceTest {
 
   private static UserRow user(long id, String login, Role role, boolean active) {
     return new UserRow(
-        id, login, "成员" + id, "hash", role, active, LocalDateTime.of(2026, 1, 1, 9, 0));
+        id, login, "成员" + id, "", "hash", role, active, LocalDateTime.of(2026, 1, 1, 9, 0));
   }
 
   @Test
@@ -60,7 +60,7 @@ class UserServiceTest {
   void createRejectsBlankLogin() {
     assertThatThrownBy(() -> service.create("  ", "Alice", "Str0ngPass!x", null))
         .isInstanceOf(IllegalArgumentException.class);
-    verify(userMapper, never()).insert(any(), any(), any(), any(), anyBoolean());
+    verify(userMapper, never()).insert(any(), any(), any(), any(), any(), anyBoolean());
   }
 
   @Test
@@ -79,7 +79,7 @@ class UserServiceTest {
   void createLowercasesAndTrimsLogin() {
     when(userMapper.findByLogin("alice")).thenReturn(Optional.empty());
     when(passwordEncoder.encode("Str0ngPass!x")).thenReturn("ENC");
-    when(userMapper.insert("alice", "Alicia", "ENC", Role.MEMBER, true)).thenReturn(1);
+    when(userMapper.insert("alice", "Alicia", "", "ENC", Role.MEMBER, true)).thenReturn(1);
     when(userMapper.lastInsertId()).thenReturn(5L);
     when(userMapper.findById(5L)).thenReturn(Optional.of(user(5, "alice", Role.MEMBER, true)));
 
@@ -100,7 +100,7 @@ class UserServiceTest {
     assertThatThrownBy(() -> service.create("bob", "Bob", "short", null))
         .isInstanceOf(ApiException.class)
         .satisfies(ex -> assertThat(((ApiException) ex).status()).isEqualTo(HttpStatus.BAD_REQUEST));
-    verify(userMapper, never()).insert(any(), any(), any(), any(), anyBoolean());
+    verify(userMapper, never()).insert(any(), any(), any(), any(), any(), anyBoolean());
   }
 
   @Test
@@ -113,13 +113,13 @@ class UserServiceTest {
   void createDefaultsRoleToMember() {
     when(userMapper.findByLogin("bob")).thenReturn(Optional.empty());
     when(passwordEncoder.encode("Str0ngPass!x")).thenReturn("ENC");
-    when(userMapper.insert("bob", "Bob", "ENC", Role.MEMBER, true)).thenReturn(1);
+    when(userMapper.insert("bob", "Bob", "", "ENC", Role.MEMBER, true)).thenReturn(1);
     when(userMapper.lastInsertId()).thenReturn(6L);
     when(userMapper.findById(6L)).thenReturn(Optional.of(user(6, "bob", Role.MEMBER, true)));
 
     service.create("bob", "Bob", "Str0ngPass!x", null);
 
-    verify(userMapper).insert("bob", "Bob", "ENC", Role.MEMBER, true);
+    verify(userMapper).insert("bob", "Bob", "", "ENC", Role.MEMBER, true);
   }
 
   @Test
@@ -145,7 +145,7 @@ class UserServiceTest {
     assertThatThrownBy(() -> service.update(1L, "管理员", Role.MEMBER, true))
         .isInstanceOf(ApiException.class)
         .satisfies(ex -> assertThat(((ApiException) ex).status()).isEqualTo(HttpStatus.CONFLICT));
-    verify(userMapper, never()).update(anyLong(), anyString(), any(), anyBoolean());
+    verify(userMapper, never()).update(anyLong(), anyString(), anyString(), any(), anyBoolean());
   }
 
   @Test
@@ -163,7 +163,7 @@ class UserServiceTest {
         .thenReturn(Optional.of(user(1, "admin", Role.ADMIN, true)))
         .thenReturn(Optional.of(user(1, "admin", Role.MEMBER, true)));
     when(userMapper.countActiveAdmins()).thenReturn(2L);
-    when(userMapper.update(1L, "管理员", Role.MEMBER, true)).thenReturn(1);
+    when(userMapper.update(1L, "管理员", "", Role.MEMBER, true)).thenReturn(1);
 
     assertThat(service.update(1L, " 管理员 ", Role.MEMBER, true).role()).isEqualTo("MEMBER");
   }

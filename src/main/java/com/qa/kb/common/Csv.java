@@ -11,7 +11,7 @@ import java.util.List;
  * 行分隔统一按 {@code \r\n} / {@code \n} / {@code \r} 任一识别；解析结果按「记录」组织，
  * 一条记录可跨多行（引号内换行）。不引第三方库：功能面窄，自写 80 行更可控。
  *
- * <p>BOM（{@code ﻿}）在解析时剥掉——Excel 另存的 CSV 常带 BOM，不剥会污染首列表头。
+ * <p>BOM（{@code \uFEFF}）在解析时剥掉——Excel 另存的 CSV 常带 BOM，不剥会污染首列表头。
  */
 public final class Csv {
 
@@ -22,7 +22,7 @@ public final class Csv {
     if (content == null || content.isEmpty()) {
       return new ArrayList<>();
     }
-    String text = content.charAt(0) == '﻿' ? content.substring(1) : content;
+    String text = content.charAt(0) == '\uFEFF' ? content.substring(1) : content;
     List<List<String>> records = new ArrayList<>();
     List<String> current = new ArrayList<>();
     StringBuilder cell = new StringBuilder();

@@ -34,21 +34,23 @@ class MemberControllerTest {
     when(userService.list())
         .thenReturn(
             List.of(
-                new UserService.UserView(1L, "admin", "管理员", "ADMIN", true),
-                new UserService.UserView(2L, "bob", "鲍勃", "MEMBER", true),
-                new UserService.UserView(3L, "old", "停用成员", "MEMBER", false)));
+                new UserService.UserView(
+                    1L, "admin", "管理员", "admin@example.com", "ADMIN", true),
+                new UserService.UserView(2L, "bob", "鲍勃", "", "MEMBER", true),
+                new UserService.UserView(3L, "old", "停用成员", "", "MEMBER", false)));
 
     mvc.perform(get("/api/members"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(2))
         .andExpect(jsonPath("$[0].login").value("admin"))
+        .andExpect(jsonPath("$[0].email").value("admin@example.com"))
         .andExpect(jsonPath("$[1].login").value("bob"));
   }
 
   @Test
   void membersNeverExposePasswordMaterial() throws Exception {
     when(userService.list())
-        .thenReturn(List.of(new UserService.UserView(1L, "admin", "管理员", "ADMIN", true)));
+        .thenReturn(List.of(new UserService.UserView(1L, "admin", "管理员", "", "ADMIN", true)));
 
     // UserView 不含 passwordHash 字段——序列化响应里绝不能出现密码散列
     mvc.perform(get("/api/members"))

@@ -80,7 +80,8 @@ class AuthServiceTest {
 
   private UserRow user(String password) {
     return new UserRow(
-        1L, "alice", "Alice", encoder.encode(password), Role.MEMBER, true, LocalDateTime.now());
+        1L, "alice", "Alice", "", encoder.encode(password), Role.MEMBER, true,
+        LocalDateTime.now());
   }
 
   @Test
@@ -143,6 +144,7 @@ class AuthServiceTest {
             1L,
             "alice",
             "Alice",
+            "",
             encoder.encode("P@ssw0rd!2026"),
             Role.MEMBER,
             false,
@@ -207,7 +209,7 @@ class AuthServiceTest {
     when(sessionMapper.findValid("token", now))
         .thenReturn(Optional.of(new SessionRow("token", 1L, now, now, now.plusHours(1))));
     UserRow inactive =
-        new UserRow(1L, "alice", "Alice", "hash", Role.MEMBER, false, LocalDateTime.now());
+        new UserRow(1L, "alice", "Alice", "", "hash", Role.MEMBER, false, LocalDateTime.now());
     when(userMapper.findById(1L)).thenReturn(Optional.of(inactive));
 
     assertThat(service.authenticate("token")).isEmpty();

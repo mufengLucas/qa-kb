@@ -11,6 +11,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -48,8 +49,11 @@ public class NotificationService {
   /** 列表结果：未读数 + 当前页（未读在前，同状态按 id 倒序）。 */
   public record NotificationPage(long unread, List<NotificationRow> items) {}
 
-  /** 一次扫描的产出，供调度日志与测试断言。 */
-  public record ScanResult(int weeklyReminders, int overdueTasks) {}
+  /** 一次扫描的产出，供调度日志、外发汇总与测试断言。 */
+  public record ScanResult(int weeklyReminders, int overdueTasks, List<NewNotice> newNotices) {}
+
+  /** 本次扫描真正新落库的一条通知——外发汇总（A2）的原料；幂等重扫时不会出现。 */
+  public record NewNotice(long userId, String type, String title, String body) {}
 
   /* ------------------------------------------------------------------ 读取 */
 
@@ -78,13 +82,19 @@ public class NotificationService {
   /**
    * 每日扫描：先补本周周报提醒，再补逾期任务提醒。幂等，可重复调用。
    *
+   * <p>真正新插入的通知会带进 {@link ScanResult#newNotices()}，供 A2 外发通道合并成
+   * 每日汇总；已存在（dedup 命中）的不算新增，也不会被外发。
+   *
    * @param today 业务日期（由调度器用业务时区的 Clock 取，测试可注入任意日期）
    */
   public ScanResult scan(LocalDate today) {
     if (today == null) {
       throw new IllegalArgumentException("日期不能为空");
     }
-    return new ScanResult(remindMissingWeekly(today), remindOverdueTasks(today));
+    List<NewNotice> created = new ArrayList<>();
+    int weekly = remindMissingWeekly(today, created);
+    int overdue = remindOverdueTasks(today, created);
+    return new ScanResult(weekly, overdue, List.copyOf(created));
   }
 
   /**
@@ -93,23 +103,28 @@ public class NotificationService {
    * <p>复用 {@code /api/reports/missing?week=} 同一个查询，通知名单与周报页展示的
    * 「未提交名单」口径完全一致；dedup 键按周，周内重复扫描不会重复提醒。
    */
-  private int remindMissingWeekly(LocalDate today) {
+  private int remindMissingWeekly(LocalDate today, List<NewNotice> created) {
     LocalDate weekStart = ReportWeekCalculator.weekOf(today).start();
     String weekLabel =
         weekStart.format(DAY_FORMAT) + " ~ " + weekStart.plusDays(6).format(DAY_FORMAT);
-    int created = 0;
+    int count = 0;
     for (Long userId : reportMapper.missingUserIds(weekStart)) {
-      created +=
+      String body = "本周（" + weekLabel + "）周报尚未提交，请到「周报」页填写。";
+      int inserted =
           notificationMapper.insertIfAbsent(
               userId,
               TYPE_WEEKLY_REPORT,
               "周报提醒",
-              "本周（" + weekLabel + "）周报尚未提交，请到「周报」页填写。",
+              body,
               "week",
               weekStart.toEpochDay(),
               "weekly:" + weekStart);
+      count += inserted;
+      if (inserted > 0) {
+        created.add(new NewNotice(userId, TYPE_WEEKLY_REPORT, "周报提醒", body));
+      }
     }
-    return created;
+    return count;
   }
 
   /**
@@ -118,9 +133,9 @@ public class NotificationService {
    *
    * <p>dedup 键含 dueDate：改期后再次逾期会重新提醒，持续逾期不会每天刷屏。
    */
-  private int remindOverdueTasks(LocalDate today) {
+  private int remindOverdueTasks(LocalDate today, List<NewNotice> created) {
     Set<Long> activeUsers = activeUserIds();
-    int created = 0;
+    int count = 0;
     for (OverdueTask task : notificationMapper.listOverdueTasks(today)) {
       // SQL 已粗筛 status <> 'done' 且 due_date < today；这里用唯一口径复核。
       if (!ProgressCalculator.isOverdue(task.status(), task.dueDate(), today)) {
@@ -138,7 +153,7 @@ public class NotificationService {
               + "）已逾期，截止 "
               + task.dueDate().format(DAY_FORMAT)
               + "。";
-      created +=
+      int inserted =
           notificationMapper.insertIfAbsent(
               recipient,
               TYPE_TASK_OVERDUE,
@@ -147,8 +162,12 @@ public class NotificationService {
               "project",
               task.projectId(),
               "overdue:" + task.taskId() + ":" + task.dueDate());
+      count += inserted;
+      if (inserted > 0) {
+        created.add(new NewNotice(recipient, TYPE_TASK_OVERDUE, "任务逾期", body));
+      }
     }
-    return created;
+    return count;
   }
 
   /** 收件人：启用的负责人优先，其次启用的项目 owner，都没有则跳过。 */

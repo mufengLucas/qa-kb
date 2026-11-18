@@ -137,6 +137,10 @@ netsh advfirewall firewall add rule name="QA-KB 8787" dir=in action=allow protoc
 - **VIEWER**：只读。
 - 登录名唯一且统一转小写；系统会阻止「停用/降级/删除最后一个可用 ADMIN」，避免把自己锁在门外。
 - 登录失败有频率限制（默认 10 次 / 15 分钟窗口），密码使用 BCrypt 存储。
+- **成员邮箱（A2）**：「成员」页可为每个账号填**选填**的邮箱（列表内联修改、留空即不收），
+  用于接收外发通知汇总——本次扫描新增了通知的成员会收到密送（Bcc）。地址在入口处校验
+  （格式 + 200 字符上限），脏地址直接 400；不填则该成员不参与邮件投递。老库启动时由
+  `SchemaInitializer.ensureColumn` 幂等补列。
 
 **空间级权限**（P2 Phase 3）：
 
@@ -185,8 +189,29 @@ netsh advfirewall firewall add rule name="QA-KB 8787" dir=in action=allow protoc
   通知写操作属个人收件箱状态，**不进操作审计**。
 - 端点：`GET /api/notifications?limit=` → `{unread, items}`（未读在前、同状态最新在前）、
   `POST /api/notifications/{id}/read`、`POST /api/notifications/read-all` → `{updated}`、
-  `POST /api/notifications/scan` → `{weeklyReminders, overdueTasks}`。
+  `POST /api/notifications/scan` → `{weeklyReminders, overdueTasks, newNotices}`
+  （`newNotices` 是本次**真正新落库**的明细：`{userId, type, title, body}`，幂等重扫为 `[]`）。
 - 调度可单独关闭：`KB_NOTIFY_ENABLED=false`（关掉后手工 scan 端点仍可用）。
+
+**外发通道（A2）**：扫描出新增后，`OutboundNotifier` 把它们合并成**一条每日汇总**，
+投递到已配置的通道；**邮件与 IM 同款文本**。三个不变式：
+
+- **只发增量**：`newNotices` 为空（幂等重扫 / 无待办）时不发任何东西，同一份汇总不会重发；
+- **失败隔离**：通道异常只记日志，绝不向调度线程或 HTTP 响应抛出——站内通知在扫描时
+  已落库，外发是旁路，挂了不连累扫描；
+- **同款内容**：收件人 = 固定列表 `KB_NOTIFY_EMAIL_TO`（To）∪ 本次新通知收件人的邮箱
+  （Bcc，互不暴露地址）；汇总明细三层截断（20 行 / 单行 100 字符 / 整体 1200 字符），
+  防止逾期任务成批出现时消息爆炸。
+
+两个通道都**不配置就不启用**：
+
+| 通道 | 启用条件 | 说明 |
+| --- | --- | --- |
+| 邮件 | `KB_NOTIFY_EMAIL_ENABLED=true` 且 `KB_NOTIFY_EMAIL_HOST` 非空 | SMTP 现场组装；587/25 走 STARTTLS，465 走 SSL；`FROM` 缺省回落到 `USERNAME` |
+| IM Webhook | `KB_NOTIFY_IM_URL` 非空 | `KB_NOTIFY_IM_TYPE`：`wecom`（默认）/ `dingtalk` / `feishu`；`KB_NOTIFY_IM_SECRET` 可选（钉钉加签进 URL、飞书签名进报文，留空不签名） |
+
+凭据与密钥**只经环境变量注入**，不入库、不进仓库；未配置通道时扫描只打一行 debug 日志
+「邮件与 IM 均未配置，跳过」。手工 `POST /api/notifications/scan` 走同一入口，补扫出的通知同样外发。
 
 ---
 
@@ -287,6 +312,16 @@ $env:KB_BACKUP_CRON='0 30 2 * * *'
 | `KB_BACKUP_CRON` | `0 30 2 * * *` | 备份 cron（秒 分 时 日 月 周） |
 | `KB_NOTIFY_ENABLED` | `true` | 是否启用每日站内通知扫描（周报提醒 + 任务逾期） |
 | `KB_NOTIFY_CRON` | `0 0 9 * * *` | 通知扫描 cron（秒 分 时 日 月 周） |
+| `KB_NOTIFY_EMAIL_ENABLED` | `false` | 邮件通道总开关（还需 `HOST` 非空才真正启用） |
+| `KB_NOTIFY_EMAIL_HOST` | 空 | SMTP 主机（如 `smtp.qq.com`），留空即不启用邮件通道 |
+| `KB_NOTIFY_EMAIL_PORT` | `587` | SMTP 端口：587/25 走 STARTTLS，465 走 SSL |
+| `KB_NOTIFY_EMAIL_USERNAME` | 空 | SMTP 登录名（留空则不认证） |
+| `KB_NOTIFY_EMAIL_PASSWORD` | 空 | SMTP 口令（**只走环境变量，绝不入库/入仓**） |
+| `KB_NOTIFY_EMAIL_FROM` | 空 | 发件人，留空回落到 `USERNAME` |
+| `KB_NOTIFY_EMAIL_TO` | 空 | 固定收件人（逗号分隔），与成员邮箱并集投递 |
+| `KB_NOTIFY_IM_URL` | 空 | IM 机器人 Webhook 地址，留空即不启用 IM 通道 |
+| `KB_NOTIFY_IM_TYPE` | `wecom` | 机器人类型：`wecom` / `dingtalk` / `feishu` |
+| `KB_NOTIFY_IM_SECRET` | 空 | 加签密钥（钉钉加签 / 飞书签名），留空不签名 |
 
 ---
 
@@ -306,7 +341,7 @@ cd D:\qa-kb
   启动时 DROP + CREATE），因此不会污染生产库 `qa_kb`，用例之间也互不干扰。
 - 连接信息来自环境变量 `KB_DB_HOST` / `KB_DB_PORT` / `KB_DB_USER` / `KB_DB_PASSWORD`
   （缺 `KB_DB_PASSWORD` 时测试会直接报错并给出注入提示）。
-- 当前测试数：**482 个，全部通过**。
+- 当前测试数：**510 个，全部通过**。
 - 源码结构：
   - `src/main/java/com/qa/kb/web`：REST 接口
   - `src/main/java/com/qa/kb/{page,space,report,project,user,search,backup,testcase,notify}`：业务逻辑
@@ -351,8 +386,6 @@ cd D:\qa-kb
 > 完整的功能差距分析（对标 13 家主流 QA 工具、Top 10 路线图与明确不做清单）见
 > [`docs/market-qa-feature-gap.md`](docs/market-qa-feature-gap.md)。以下是代码核对后的缺口清单：
 
-- 邮件 / 企业微信**外发**通知（站内通知已实现，见 §2.6：目前只在系统内铃铛提醒，
-  不会把消息发到邮箱或 IM）
 - 缺陷管理（无缺陷表、无状态流、无与用例/执行的关联）
 - 报表仪表盘（仅用例统计回显与项目进度%，无图表、无导出）
 - 用例评论与 @提及（评审协作）

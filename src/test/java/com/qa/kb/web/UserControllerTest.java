@@ -42,7 +42,7 @@ class UserControllerTest {
   }
 
   private static UserService.UserView view(long id, String login) {
-    return new UserService.UserView(id, login, "成员" + id, "MEMBER", true);
+    return new UserService.UserView(id, login, "成员" + id, "", "MEMBER", true);
   }
 
   @Test
@@ -58,7 +58,7 @@ class UserControllerTest {
 
   @Test
   void createReturnsCreated() throws Exception {
-    when(userService.create("bob", "Bob", "Str0ngPass!x", "MEMBER"))
+    when(userService.create("bob", "Bob", "Str0ngPass!x", "MEMBER", null))
         .thenReturn(view(3, "bob"));
 
     mvc.perform(
@@ -85,7 +85,7 @@ class UserControllerTest {
 
   @Test
   void updateParsesRoleAndDefaultsActiveToTrue() throws Exception {
-    when(userService.update(2L, "Alice", Role.ADMIN, true)).thenReturn(view(2, "alice"));
+    when(userService.update(2L, "Alice", Role.ADMIN, true, null)).thenReturn(view(2, "alice"));
 
     mvc.perform(
             put("/api/users/2")
@@ -103,6 +103,59 @@ class UserControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"Alice\",\"role\":\"OWNER\"}"))
         .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void createPassesEmailThrough() throws Exception {
+    when(userService.create("bob", "Bob", "Str0ngPass!x", "MEMBER", "bob@example.com"))
+        .thenReturn(view(3, "bob"));
+
+    mvc.perform(
+            post("/api/users")
+                .principal(TestAuth.ADMIN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"login\":\"bob\",\"name\":\"Bob\",\"password\":\"Str0ngPass!x\","
+                        + "\"role\":\"MEMBER\",\"email\":\"bob@example.com\"}"))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.login").value("bob"));
+  }
+
+  @Test
+  void updatePassesEmailThrough() throws Exception {
+    when(userService.update(2L, "Alice", Role.ADMIN, true, "alice@example.com"))
+        .thenReturn(view(2, "alice"));
+
+    mvc.perform(
+            put("/api/users/2")
+                .principal(TestAuth.ADMIN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"name\":\"Alice\",\"role\":\"ADMIN\",\"email\":\"alice@example.com\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.email").value(""));
+  }
+
+  @Test
+  void rejectsMalformedEmailOnCreateAndUpdate() throws Exception {
+    // DTO 层 @Email 拦截：脏地址进不了服务，更落不了库
+    mvc.perform(
+            post("/api/users")
+                .principal(TestAuth.ADMIN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"login\":\"bob\",\"name\":\"Bob\",\"password\":\"Str0ngPass!x\","
+                        + "\"email\":\"not-an-email\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("validation_failed"));
+
+    mvc.perform(
+            put("/api/users/2")
+                .principal(TestAuth.ADMIN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Alice\",\"email\":\"@@@\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("validation_failed"));
   }
 
   @Test

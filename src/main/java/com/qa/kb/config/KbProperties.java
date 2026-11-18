@@ -161,10 +161,18 @@ public class KbProperties {
     }
   }
 
-  /** 每日站内通知扫描（周报提醒 + 任务逾期），停用后手动触发的端点不受影响。 */
+  /**
+   * 每日站内通知扫描（周报提醒 + 任务逾期），停用后手动触发的端点不受影响。
+   *
+   * <p>A2 外发通知：email 与 im 两个子通道都「不配置就不启用」——email 要 {@code enabled=true}
+   * 且 {@code host} 非空，im 只看 {@code url} 非空；任一通道配好后，扫描新增的通知会合并成
+   * 一条每日汇总发出（站内铃铛不受影响，外发失败也只记日志）。
+   */
   public static class Notify {
     private boolean enabled = true;
     private String cron = "0 0 9 * * *";
+    private final Email email = new Email();
+    private final Im im = new Im();
 
     public boolean isEnabled() {
       return enabled;
@@ -180,6 +188,116 @@ public class KbProperties {
 
     public void setCron(String cron) {
       this.cron = cron;
+    }
+
+    public Email getEmail() {
+      return email;
+    }
+
+    public Im getIm() {
+      return im;
+    }
+  }
+
+  /** SMTP 邮件通道：凭据只经环境变量注入（公开仓库不落任何真实口令）。 */
+  public static class Email {
+    private boolean enabled = false;
+    private String host = "";
+    private int port = 587;
+    private String username = "";
+    private String password = "";
+    private String from = "";
+    /** 固定收件人（逗号分隔），与成员邮箱并集投递。 */
+    private String to = "";
+
+    public boolean isEnabled() {
+      return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+      this.enabled = enabled;
+    }
+
+    public String getHost() {
+      return host;
+    }
+
+    public void setHost(String host) {
+      this.host = host;
+    }
+
+    public int getPort() {
+      return port;
+    }
+
+    public void setPort(int port) {
+      this.port = port;
+    }
+
+    public String getUsername() {
+      return username;
+    }
+
+    public void setUsername(String username) {
+      this.username = username;
+    }
+
+    public String getPassword() {
+      return password;
+    }
+
+    public void setPassword(String password) {
+      this.password = password;
+    }
+
+    public String getFrom() {
+      return from;
+    }
+
+    public void setFrom(String from) {
+      this.from = from;
+    }
+
+    public String getTo() {
+      return to;
+    }
+
+    public void setTo(String to) {
+      this.to = to;
+    }
+  }
+
+  /**
+   * 通用 IM 机器人 Webhook：{@code type} 决定报文形状（wecom / dingtalk / feishu），
+   * {@code url} 留空即整个通道不启用；{@code secret} 可选（钉钉加签、飞书签名）。
+   */
+  public static class Im {
+    private String url = "";
+    private String type = "wecom";
+    private String secret = "";
+
+    public String getUrl() {
+      return url;
+    }
+
+    public void setUrl(String url) {
+      this.url = url;
+    }
+
+    public String getType() {
+      return type;
+    }
+
+    public void setType(String type) {
+      this.type = type;
+    }
+
+    public String getSecret() {
+      return secret;
+    }
+
+    public void setSecret(String secret) {
+      this.secret = secret;
     }
   }
 }

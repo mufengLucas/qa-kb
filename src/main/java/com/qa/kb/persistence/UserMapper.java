@@ -15,15 +15,25 @@ import org.apache.ibatis.annotations.Update;
 public interface UserMapper {
 
   @Select(
-      "SELECT id, login, name, password_hash, role, active, created_at FROM users WHERE id = #{id}")
+      "SELECT id, login, name, email, password_hash, role, active, created_at FROM users "
+          + "WHERE id = #{id}")
   Optional<UserRow> findById(@Param("id") long id);
 
   @Select(
-      "SELECT id, login, name, password_hash, role, active, created_at FROM users WHERE login = #{login}")
+      "SELECT id, login, name, email, password_hash, role, active, created_at FROM users "
+          + "WHERE login = #{login}")
   Optional<UserRow> findByLogin(@Param("login") String login);
 
-  @Select("SELECT id, login, name, password_hash, role, active, created_at FROM users ORDER BY id")
+  @Select(
+      "SELECT id, login, name, email, password_hash, role, active, created_at FROM users "
+          + "ORDER BY id")
   List<UserRow> findAll();
+
+  /** 外发通知用的联系人投影：id → 姓名 / 邮箱（一次取回，扫描不逐行查库）。 */
+  @Select("SELECT id, name, email FROM users")
+  List<UserContact> listContacts();
+
+  record UserContact(long id, String name, String email) {}
 
   @Select("SELECT COUNT(*) FROM users")
   long count();
@@ -32,11 +42,12 @@ public interface UserMapper {
   long countActiveAdmins();
 
   @Insert(
-      "INSERT INTO users (login, name, password_hash, role, active) "
-          + "VALUES (#{login}, #{name}, #{passwordHash}, #{role}, #{active})")
+      "INSERT INTO users (login, name, email, password_hash, role, active) "
+          + "VALUES (#{login}, #{name}, #{email}, #{passwordHash}, #{role}, #{active})")
   int insert(
       @Param("login") String login,
       @Param("name") String name,
+      @Param("email") String email,
       @Param("passwordHash") String passwordHash,
       @Param("role") Role role,
       @Param("active") boolean active);
@@ -44,9 +55,11 @@ public interface UserMapper {
   /** 自增主键回填；SQL 按方言在 {@code mapper/UserMapper.xml} 中选择。 */
   long lastInsertId();
 
-  @Update("UPDATE users SET name = #{name}, role = #{role}, active = #{active} WHERE id = #{id}")
-  int update(@Param("id") long id, @Param("name") String name, @Param("role") Role role,
-      @Param("active") boolean active);
+  @Update(
+      "UPDATE users SET name = #{name}, email = #{email}, role = #{role}, active = #{active} "
+          + "WHERE id = #{id}")
+  int update(@Param("id") long id, @Param("name") String name, @Param("email") String email,
+      @Param("role") Role role, @Param("active") boolean active);
 
   @Update("UPDATE users SET password_hash = #{passwordHash} WHERE id = #{id}")
   int updatePassword(@Param("id") long id, @Param("passwordHash") String passwordHash);

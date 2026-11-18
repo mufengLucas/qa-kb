@@ -357,7 +357,7 @@
 
         /* 成员 */
         users: [],
-        newUser: { login: "", name: "", password: "", role: "MEMBER" },
+        newUser: { login: "", name: "", password: "", role: "MEMBER", email: "" },
         showNewUser: false,
         backupBusy: false,
         lastBackup: null,
@@ -1437,8 +1437,9 @@
             name: form.name.trim(),
             password: form.password,
             role: form.role || "MEMBER",
+            email: (form.email || "").trim(),
           });
-          this.newUser = { login: "", name: "", password: "", role: "MEMBER" };
+          this.newUser = { login: "", name: "", password: "", role: "MEMBER", email: "" };
           this.showNewUser = false;
           await this.loadUsers();
           this.toast("成员已创建", "ok");
@@ -1452,6 +1453,8 @@
             name: patch.name != null ? patch.name : user.name,
             role: patch.role != null ? patch.role : user.role,
             active: patch.active != null ? patch.active : user.active,
+            // 邮箱：null/undefined → 后端保持原值；空串 → 清空
+            email: patch.email != null ? patch.email : (user.email || ""),
           });
           Object.assign(user, updated);
           this.toast("成员信息已更新", "ok");

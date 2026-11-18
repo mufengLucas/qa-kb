@@ -62,6 +62,24 @@ kb:
     enabled: ${KB_NOTIFY_ENABLED:true}
     # 每日扫描周报提醒与任务逾期（秒 分 时 日 月 周）
     cron: ${KB_NOTIFY_CRON:0 0 9 * * *}
+    # ---- A2 外发通知：两个通道都不配置就不启用；口令/密钥只走环境变量 ----
+    email:
+      # 启用条件：enabled=true 且 host 非空
+      enabled: ${KB_NOTIFY_EMAIL_ENABLED:false}
+      host: ${KB_NOTIFY_EMAIL_HOST:}
+      port: ${KB_NOTIFY_EMAIL_PORT:587}
+      username: ${KB_NOTIFY_EMAIL_USERNAME:}
+      password: ${KB_NOTIFY_EMAIL_PASSWORD:}
+      # 发件人，留空回落到 username
+      from: ${KB_NOTIFY_EMAIL_FROM:}
+      # 固定收件人（逗号分隔），与「成员」页配置了邮箱的启用成员并集投递
+      to: ${KB_NOTIFY_EMAIL_TO:}
+    im:
+      # 启用条件：url 非空；type: wecom(企业微信) / dingtalk(钉钉) / feishu(飞书)
+      url: ${KB_NOTIFY_IM_URL:}
+      type: ${KB_NOTIFY_IM_TYPE:wecom}
+      # 可选：钉钉加签 / 飞书签名密钥，留空不签名
+      secret: ${KB_NOTIFY_IM_SECRET:}
 
 logging:
   level:

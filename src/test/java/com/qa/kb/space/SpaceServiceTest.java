@@ -301,6 +301,6 @@ class SpaceServiceTest {
   }
 
   private static UserRow userRow(long id, String login) {
-    return new UserRow(id, login, "成员" + id, "hash", Role.MEMBER, true, LocalDateTime.now());
+    return new UserRow(id, login, "成员" + id, "", "hash", Role.MEMBER, true, LocalDateTime.now());
   }
 }

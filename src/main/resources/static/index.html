@@ -1425,6 +1425,15 @@
                   <option value="ADMIN">ADMIN（可管理成员）</option>
                 </select>
               </div>
+              <div class="field">
+                <label>邮箱（选填）</label>
+                <input
+                  class="input"
+                  type="email"
+                  v-model="newUser.email"
+                  placeholder="用于接收外发通知汇总，可留空"
+                />
+              </div>
             </div>
             <div class="row">
               <button class="btn primary" @click="createUser">创建</button>
@@ -1438,6 +1447,7 @@
                 <tr>
                   <th>姓名</th>
                   <th>登录名</th>
+                  <th style="width: 210px">邮箱</th>
                   <th style="width: 180px">角色</th>
                   <th style="width: 90px">启用</th>
                   <th style="width: 190px">操作</th>
@@ -1447,6 +1457,14 @@
                 <tr v-for="member in users" :key="member.id">
                   <td><b>{{ member.name }}</b></td>
                   <td class="muted">{{ member.login }}</td>
+                  <td>
+                    <input
+                      class="input"
+                      :value="member.email"
+                      placeholder="（不收外发邮件）"
+                      @change="updateUser(member, { email: $event.target.value.trim() })"
+                    />
+                  </td>
                   <td>
                     <select
                       class="select"

@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(100) NOT NULL,
   role ENUM('ADMIN', 'MEMBER', 'VIEWER') NOT NULL DEFAULT 'MEMBER',
   active TINYINT(1) NOT NULL DEFAULT 1,
+  -- A2 外发通知的按人投递地址；可为空（空 = 不收邮件），老库由 SchemaInitializer 幂等补列
+  email VARCHAR(200) NOT NULL DEFAULT '',
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   UNIQUE KEY uk_users_login (login)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;

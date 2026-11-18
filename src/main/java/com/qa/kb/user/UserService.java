@@ -22,12 +22,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserService {
 
   public static final int MAX_NAME_LENGTH = 100;
+  public static final int MAX_EMAIL_LENGTH = 200;
   private static final Pattern LOGIN_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9._-]{2,63}$");
+  private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$");
 
-  public record UserView(long id, String login, String name, String role, boolean active) {
+  public record UserView(long id, String login, String name, String email, String role,
+      boolean active) {
     public static UserView of(UserRow row) {
       return new UserView(
-          row.id(), row.login(), row.name(), row.role().name(), row.active());
+          row.id(), row.login(), row.name(), row.email(), row.role().name(), row.active());
     }
   }
 
@@ -45,8 +48,18 @@ public class UserService {
 
   @Transactional
   public UserView create(String login, String name, String rawPassword, String role) {
+    return create(login, name, rawPassword, role, "");
+  }
+
+  /**
+   * 创建成员（含邮箱）：邮箱可留空（= 不接收外发邮件），填了就按 {@link #MAX_EMAIL_LENGTH}
+   * 与格式校验——外发投递失败往往源于脏地址，脏数据在入口就挡住。
+   */
+  @Transactional
+  public UserView create(String login, String name, String rawPassword, String role, String email) {
     String cleanLogin = normalizeLogin(login);
     String cleanName = requireName(name);
+    String cleanEmail = normalizeEmail(email);
     Role parsedRole = role == null || role.isBlank() ? Role.MEMBER : Role.parse(role);
     requirePassword(cleanLogin, rawPassword);
 
@@ -55,7 +68,7 @@ public class UserService {
     }
 
     userMapper.insert(
-        cleanLogin, cleanName, passwordEncoder.encode(rawPassword), parsedRole, true);
+        cleanLogin, cleanName, cleanEmail, passwordEncoder.encode(rawPassword), parsedRole, true);
     long id = userMapper.lastInsertId();
     return userMapper
         .findById(id)
@@ -63,12 +76,23 @@ public class UserService {
         .orElseThrow(() -> ApiException.notFound("用户不存在"));
   }
 
+  /** 更新成员（保留原邮箱）：不涉及邮箱的调用方走这个重载。 */
   @Transactional
   public UserView update(long id, String name, Role role, boolean active) {
+    return update(id, name, role, active, null);
+  }
+
+  /**
+   * 更新成员（含邮箱）。{@code email == null} 表示不动邮箱；空串表示清空；
+   * 非空则校验后覆盖——前端不回传该字段时不会把已有邮箱抹掉。
+   */
+  @Transactional
+  public UserView update(long id, String name, Role role, boolean active, String email) {
     UserRow existing =
         userMapper.findById(id).orElseThrow(() -> ApiException.notFound("用户不存在"));
     String cleanName = requireName(name);
     Role nextRole = role == null ? existing.role() : role;
+    String nextEmail = email == null ? existing.email() : normalizeEmail(email);
 
     boolean removesActiveAdmin =
         existing.role() == Role.ADMIN
@@ -78,7 +102,7 @@ public class UserService {
       throw ApiException.conflict("至少要保留一名启用状态的管理员");
     }
 
-    userMapper.update(id, cleanName, nextRole, active);
+    userMapper.update(id, cleanName, nextEmail, nextRole, active);
     return userMapper.findById(id).map(UserView::of).orElseThrow(() -> ApiException.notFound("用户不存在"));
   }
 
@@ -138,6 +162,24 @@ public class UserService {
     String clean = name.strip();
     if (clean.length() > MAX_NAME_LENGTH) {
       throw new IllegalArgumentException("姓名不能超过 " + MAX_NAME_LENGTH + " 个字符");
+    }
+    return clean;
+  }
+
+  /** 邮箱清洗：null/空白统一为 ""（不收邮件）；非空则限长并校验最简格式。 */
+  private static String normalizeEmail(String email) {
+    if (email == null) {
+      return "";
+    }
+    String clean = email.strip();
+    if (clean.isEmpty()) {
+      return "";
+    }
+    if (clean.length() > MAX_EMAIL_LENGTH) {
+      throw new IllegalArgumentException("邮箱不能超过 " + MAX_EMAIL_LENGTH + " 个字符");
+    }
+    if (!EMAIL_PATTERN.matcher(clean).matches()) {
+      throw new IllegalArgumentException("邮箱格式不正确: " + clean);
     }
     return clean;
   }
