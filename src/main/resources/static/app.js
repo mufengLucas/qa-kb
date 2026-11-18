@@ -396,6 +396,27 @@
         newRun: { result: "PASS", note: "" },
         runBusy: false,
 
+        /* 报表 */
+        statsLoaded: false,
+        statsBusy: false,
+        selectedModule: "",
+        selectedPriority: "",
+        modules: [],
+        modulePriorityData: [],
+        failedTopModules: [],
+        resultSummary: {
+          passCount: 0,
+          failCount: 0,
+          blockedCount: 0,
+          skippedCount: 0,
+          totalCount: 0,
+          passRate: 0,
+        },
+        dailyTrendData: [],
+        monthStart: "",
+        monthEnd: "",
+        todayMonthStart: "",
+
         /* 站内通知（P2 Phase 5） */
         notifications: [],
         notifUnread: 0,
@@ -500,6 +521,10 @@
         if (value === "cases" && !this.casesLoaded) {
           this.loadCases();
         }
+        // 进入报表页且首次可见时懒加载统计
+        if (value === "stats" && !this.statsLoaded) {
+          this.loadStats();
+        }
       },
       caseQ() {
         // 与知识库搜索一致的防抖：停手 300ms 后才发请求
@@ -580,6 +605,28 @@
         this.notifOpen = !this.notifOpen;
         if (this.notifOpen) {
           this.loadNotifications();
+        }
+      },
+      /* ---------------------------------------------------------------- A3：报表 */
+      async loadStats() {
+        this.statsBusy = true;
+        try {
+          const data = await api("GET", "/api/test-reports/stats", {
+            module: this.selectedModule,
+            q: this.caseQ,
+            status: this.caseStatus,
+          });
+          this.modulePriorityData = (data && data.modulePriority) || [];
+          this.failedTopModules = (data && data.failedTopModules) || [];
+          this.resultSummary = (data && data.resultSummary)
+            ? { ...this.resultSummary, ...data.resultSummary }
+            : this.resultSummary;
+          this.dailyTrendData = (data && data.dailyTrend) || [];
+          this.statsLoaded = true;
+        } catch (error) {
+          this.toast((error && error.message) || "获取报表数据失败", "error");
+        } finally {
+          this.statsBusy = false;
         }
       },
       onDocClick(event) {
@@ -1579,6 +1626,23 @@
         try {
           await downloadCsv("/api/test-cases/runs/export");
           this.toast("执行记录已导出");
+        } catch (error) {
+          this.fail(error);
+        }
+      },
+      /** A3：导出报表 CSV */
+      async exportReportsCsv() {
+        try {
+          const params = new URLSearchParams();
+          if (this.selectedModule) {
+            params.set("module", this.selectedModule);
+          }
+          if (this.selectedPriority) {
+            params.set("priority", this.selectedPriority);
+          }
+          const suffix = params.toString();
+          await downloadCsv("/api/test-reports/export" + (suffix ? "?" + suffix : ""));
+          this.toast("报表已导出");
         } catch (error) {
           this.fail(error);
         }

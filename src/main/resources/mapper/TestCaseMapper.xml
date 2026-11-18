@@ -97,4 +97,79 @@
   <select id="lastInsertId" resultType="long">
     SELECT LAST_INSERT_ID()
   </select>
+
+  <!-- ============================== A3：报表聚合 ============================== -->
+
+  <!-- 模块/优先级分布：每个模块下各优先级的用例计数 -->
+  <select id="statModulePriority" resultType="map">
+    SELECT tc.module, tc.priority, COUNT(*) AS cnt
+    FROM test_cases tc
+    LEFT JOIN test_runs r ON r.case_id = tc.id
+    <include refid="filters"/>
+    GROUP BY tc.module, tc.priority
+    ORDER BY tc.module, tc.priority
+  </select>
+
+  <!-- 执行结果汇总：PASS/FAIL/BLOCKED/SKIPPED 计数与通过率 -->
+  <select id="statResultSummary" resultType="map">
+    SELECT
+      (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id AND r.result = 'PASS') AS pass_count,
+      (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id AND r.result = 'FAIL') AS fail_count,
+      (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id AND r.result = 'BLOCKED') AS blocked_count,
+      (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id AND r.result = 'SKIPPED') AS skipped_count,
+      (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id) AS total_count,
+      CASE WHEN (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id) > 0
+        THEN (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id AND r.result = 'PASS')
+          * 100 / (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id)
+        ELSE 0 END AS pass_rate
+    FROM test_cases tc
+    <include refid="filters"/>
+    GROUP BY tc.id
+    ORDER BY tc.id
+  </select>
+
+  <!-- 每日执行趋势：按执行日期统计新增执行数与通过/失败数 -->
+  <select id="statDailyTrend" resultType="map">
+    SELECT
+      DATE(r.executed_at) AS exec_date,
+      COUNT(*) AS exec_count,
+      (SELECT COUNT(*) FROM test_runs r2 WHERE r2.case_id = tc.id AND DATE(r2.executed_at) = exec_date AND r2.result = 'PASS') AS pass_count,
+      (SELECT COUNT(*) FROM test_runs r2 WHERE r2.case_id = tc.id AND DATE(r2.executed_at) = exec_date AND r2.result = 'FAIL') AS fail_count
+    FROM test_cases tc
+    JOIN test_runs r ON r.case_id = tc.id
+    <include refid="filters"/>
+    GROUP BY DATE(r.executed_at)
+    ORDER BY exec_date
+  </select>
+
+  <!-- 失败 Top 模块：result=FAIL 的用例计数最多的前 N 个模块 -->
+  <select id="statFailedTopModules" resultType="map">
+    SELECT tc.module, COUNT(*) AS fail_count
+    FROM test_cases tc
+    JOIN test_runs r ON r.case_id = tc.id AND r.result = 'FAIL'
+    <include refid="filters"/>
+    GROUP BY tc.module
+    ORDER BY fail_count DESC
+    LIMIT 10
+  </select>
+
+  <!-- 导出用的聚合报表 CSV：模块/优先级/通过率/趋势/失败模块的组合行 -->
+  <select id="exportTestReports" resultType="com.qa.kb.model.TestCaseView">
+    SELECT
+      tc.id,
+      tc.module,
+      tc.title,
+      tc.priority,
+      tc.status,
+      (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id AND r.result = 'PASS') AS pass_count,
+      (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id AND r.result != 'PASS' AND r.result != '' AND r.result IS NOT NULL) AS fail_count,
+      CASE WHEN (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id) > 0
+        THEN (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id AND r.result = 'PASS')
+          * 100 / (SELECT COUNT(*) FROM test_runs r WHERE r.case_id = tc.id)
+        ELSE 0 END AS pass_rate,
+      (SELECT r.executed_at FROM test_runs r WHERE r.case_id = tc.id ORDER BY r.id DESC LIMIT 1) AS last_run_at
+    FROM test_cases tc
+    <include refid="filters"/>
+    ORDER BY tc.id
+  </select>
 </mapper>

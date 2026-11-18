@@ -1,10 +1,12 @@
 package com.qa.kb.persistence;
 
-import com.qa.kb.model.TestCaseRow;
-import com.qa.kb.model.TestCaseRunExportRow;
-import com.qa.kb.model.TestCaseRunRow;
-import com.qa.kb.model.TestCaseView;
+import com.qa.kb.model.*;
+import com.qa.kb.model.StatModulePriorityRow;
+import com.qa.kb.model.StatResultSummaryRow;
+import com.qa.kb.model.StatDailyTrendRow;
+import com.qa.kb.model.StatFailedTopModulesRow;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
@@ -58,6 +60,21 @@ public interface TestCaseMapper {
 
   /** 自增主键回填，SQL 见 XML {@code lastInsertId}。 */
   long lastInsertId();
+
+  /** 模块/优先级分布统计，SQL 见 XML {@code statModulePriority}。 */
+  List<StatModulePriorityRow> statModulePriority(String module, String status, String pattern);
+
+  /** 执行结果汇总与通过率，SQL 见 XML {@code statResultSummary}。 */
+  Map<String, Object> statResultSummary(String module, String status, String pattern);
+
+  /** 每日执行趋势，SQL 见 XML {@code statDailyTrend}。 */
+  List<StatDailyTrendRow> statDailyTrend(String module, String status, String pattern);
+
+  /** 失败 Top 模块（前 10），SQL 见 XML {@code statFailedTopModules}。 */
+  List<StatFailedTopModulesRow> statFailedTopModules(String module, String status, String pattern);
+
+  /** 报表 CSV 导出（聚合行），SQL 见 XML {@code exportTestReports}。 */
+  List<TestCaseView> exportTestReports(String module, String status, String pattern);
 
   /** 分页 + 执行统计，SQL 见 XML {@code page}。 */
   List<TestCaseView> page(

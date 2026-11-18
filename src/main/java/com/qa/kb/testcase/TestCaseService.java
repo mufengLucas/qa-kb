@@ -2,9 +2,7 @@ package com.qa.kb.testcase;
 
 import com.qa.kb.common.ApiException;
 import com.qa.kb.common.Csv;
-import com.qa.kb.model.TestCaseRunExportRow;
-import com.qa.kb.model.TestCaseRunRow;
-import com.qa.kb.model.TestCaseView;
+import com.qa.kb.model.*;
 import com.qa.kb.persistence.TestCaseMapper;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -83,6 +81,45 @@ public class TestCaseService {
   /** 执行记录导出：一行一条执行，带用例模块与标题（跨用例全量，按执行 id 升序）。 */
   public List<TestCaseRunExportRow> exportRuns() {
     return testCaseMapper.exportRuns();
+  }
+
+  /* ------------------------------------------------------------ A3：报表统计 */
+
+  /** 模块/优先级分布 */
+  public List<StatModulePriorityRow> statModulePriority(String module, String status, String q) {
+    Filters f = filters(module, q, status);
+    return testCaseMapper.statModulePriority(f.module(), f.status(), f.pattern());
+  }
+
+  /** 执行结果汇总与通过率 */
+  public StatResultSummaryRow statResultSummary(String module, String status, String q) {
+    Filters f = filters(module, q, status);
+    Map<String, Object> map = testCaseMapper.statResultSummary(f.module(), f.status(), f.pattern());
+    long pass = ((Number) map.get("pass_count")).longValue();
+    long fail = ((Number) map.get("fail_count")).longValue();
+    long blocked = ((Number) map.get("blocked_count")).longValue();
+    long skipped = ((Number) map.get("skipped_count")).longValue();
+    long total = ((Number) map.get("total_count")).longValue();
+    double rate = total > 0 ? pass * 100.0 / total : 0.0;
+    return new StatResultSummaryRow(pass, fail, blocked, skipped, total, rate);
+  }
+
+  /** 每日执行趋势 */
+  public List<StatDailyTrendRow> statDailyTrend(String module, String status, String q) {
+    Filters f = filters(module, q, status);
+    return testCaseMapper.statDailyTrend(f.module(), f.status(), f.pattern());
+  }
+
+  /** 失败 Top 模块（前 10） */
+  public List<StatFailedTopModulesRow> statFailedTopModules(String module, String status, String q) {
+    Filters f = filters(module, q, status);
+    return testCaseMapper.statFailedTopModules(f.module(), f.status(), f.pattern());
+  }
+
+  /** 报表 CSV 导出（复用 A1 csvResponse 模式） */
+  public List<TestCaseView> exportTestReports(String module, String q, String status) {
+    Filters f = filters(module, q, status);
+    return testCaseMapper.exportTestReports(f.module(), f.status(), f.pattern());
   }
 
   /** 导入回执：成功条数 + 逐行错误（行号含表头，与用户在 Excel 里看到的行号一致）。 */

@@ -74,6 +74,9 @@
             <button class="tab" :class="{ active: tab === 'cases' }" @click="tab = 'cases'">
               用例
             </button>
+            <button class="tab" :class="{ active: tab === 'stats' }" @click="tab = 'stats'">
+              报表
+            </button>
             <button
               v-if="isAdmin"
               class="tab"
@@ -1029,6 +1032,118 @@
                 </div>
               </div>
             </div>
+          </div>
+        </main>
+
+        <!-- ======================================================== 报表 -->
+        <main v-else-if="tab === 'stats'" class="main wide">
+          <div class="page-head">
+            <div>
+              <h2>报表概览</h2>
+              <div class="sub">用例执行统计、通过率、模块分布与趋势</div>
+            </div>
+            <div class="actions">
+              <button class="btn sm" @click="prevMonth">上月</button>
+              <span class="pill brand" style="min-width: 160px; text-align: center">
+                {{ monthStart }} ~ {{ monthEnd }}
+              </span>
+              <button class="btn sm" @click="nextMonth">下月</button>
+              <button class="btn sm ghost" @click="monthStart = todayMonthStart">本月</button>
+            </div>
+          </div>
+          <div class="grid-2" style="align-items: start">
+            <div>
+              <div class="card">
+                <h3>模块/优先级分布</h3>
+                <div class="field">
+                  <label>模块</label>
+                  <select v-model="selectedModule">
+                    <option value="">全部</option>
+                    <option v-for="module in modules" :key="module">{{ module }}</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>优先级</label>
+                  <select v-model="selectedPriority">
+                    <option value="">全部</option>
+                    <option value="P0">P0</option>
+                    <option value="P1">P1</option>
+                    <option value="P2">P2</option>
+                    <option value="P3">P3</option>
+                  </select>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>模块</th><th>P0</th><th>P1</th><th>P2</th><th>P3</th><th>总计</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in modulePriorityData" :key="row.module">
+                      <td>{{ row.module }}</td>
+                      <td>{{ row.priorityP0 }}</td>
+                      <td>{{ row.priorityP1 }}</td>
+                      <td>{{ row.priorityP2 }}</td>
+                      <td>{{ row.priorityP3 }}</td>
+                      <td>{{ row.total }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="card">
+                <h3>失败 Top 模块</h3>
+                <table>
+                  <thead>
+                    <tr><th>模块</th><th>失败次数</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in failedTopModules" :key="row.module">
+                      <td>{{ row.module }}</td>
+                      <td>{{ row.failCount }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <div class="card">
+                <h3>通过率汇总</h3>
+                <div class="field">
+                  <label>通过率</label>
+                  <span>{{ resultSummary.passRate.toFixed(2) }}%</span>
+                </div>
+                <table>
+                  <thead>
+                    <tr><tr><td>总执行</td><td>{{ resultSummary.totalCount }}</td></tr>
+                    <tr><td>通过</td><td>{{ resultSummary.passCount }}</td></tr>
+                    <tr><td>失败</td><td>{{ resultSummary.failCount }}</td></tr>
+                    <tr><td>阻塞</td><td>{{ resultSummary.blockedCount }}</td></tr>
+                    <tr><td>跳过</td><td>{{ resultSummary.skippedCount }}</td></tr>
+                  </thead>
+                </table>
+              </div>
+              <div class="card">
+                <h3>每日趋势</h3>
+                <table>
+                  <thead>
+                    <tr><th>日期</th><th>执行次数</th><th>通过</th><th>失败</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in dailyTrendData" :key="row.execDate">
+                      <td>{{ row.execDate }}</td>
+                      <td>{{ row.execCount }}</td>
+                      <td>{{ row.passCount }}</td>
+                      <td>{{ row.failCount }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>CSV 导出</h3>
+            <button class="btn sm" @click="exportReportsCsv">导出 CSV</button>
+            <p class="help-text">包含模块、标题、优先级、状态、通过率、最后执行时间</p>
           </div>
         </main>
 

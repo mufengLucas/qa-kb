@@ -29,6 +29,8 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import java.util.HashMap;
+import java.util.Map;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -199,6 +201,51 @@ public class TestCaseController {
     headers.setContentDisposition(
         ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build());
     return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
+  }
+
+  /* ------------------------------------------------------------ A3：报表 */
+
+  /** 报表概览：模块/优先级分布、结果汇总、每日趋势、失败 Top 模块 */
+  @GetMapping("/test-reports/stats")
+  public ResponseEntity<Map<String, Object>> stats(
+      @RequestParam(required = false) String module,
+      @RequestParam(required = false) String q,
+      @RequestParam(required = false) String status) {
+    Map<String, Object> result = new HashMap<>();
+    result.put("modulePriority", testCaseService.statModulePriority(module, status, q));
+    result.put("resultSummary", testCaseService.statResultSummary(module, status, q));
+    result.put("dailyTrend", testCaseService.statDailyTrend(module, status, q));
+    result.put("failedTopModules", testCaseService.statFailedTopModules(module, status, q));
+    return ResponseEntity.ok(result);
+  }
+
+  /** 报表 CSV 导出：复用 A1 模式，含模块/标题/优先级/状态/通过率/最后执行时间 */
+  @GetMapping("/test-reports/export")
+  public ResponseEntity<byte[]> exportTestReports(
+      @RequestParam(required = false) String module,
+      @RequestParam(required = false) String q,
+      @RequestParam(required = false) String status) {
+    List<TestCaseView> rows = testCaseService.exportTestReports(module, q, status);
+    StringBuilder csv = new StringBuilder();
+    csv.append(Csv.row("module", "title", "priority", "status", "passRate", "lastRunAt"))
+        .append("\r\n");
+    for (TestCaseView row : rows) {
+      int fc = row.failCount();
+      double passRate = row.passCount() + fc > 0
+          ? (double) row.passCount() / (row.passCount() + fc) * 100
+          : 0.0;
+      csv.append(
+              Csv.row(
+                  row.module(),
+                  row.title(),
+                  row.priority(),
+                  row.status(),
+                  String.format("%.2f", passRate),
+                  row.lastRunAt() == null ? "" : row.lastRunAt().toString()))
+          .append("\r\n");
+    }
+    String filename = "test-reports-" + LocalDate.now() + ".csv";
+    return csvResponse(filename, csv.toString());
   }
 
   /* ------------------------------------------------------------ 执行记录 */
