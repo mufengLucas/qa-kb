@@ -244,6 +244,20 @@ CREATE TABLE IF NOT EXISTS test_runs (
   CONSTRAINT fk_tr_executor FOREIGN KEY (executor_id) REFERENCES users (id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
 
+-- A4：用例评论与 @提及。评论删除是软删除（deleted_at），@提及复用 notifications 表落站内信。
+CREATE TABLE IF NOT EXISTS test_case_comments (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  case_id BIGINT NOT NULL,
+  author_id BIGINT NOT NULL,
+  body TEXT NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NULL,
+  deleted_at DATETIME(3) NULL,
+  KEY idx_tcc_case (case_id, id),
+  CONSTRAINT fk_tcc_case FOREIGN KEY (case_id) REFERENCES test_cases (id) ON DELETE CASCADE,
+  CONSTRAINT fk_tcc_author FOREIGN KEY (author_id) REFERENCES users (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
+
 -- P2 Phase 5：站内通知（周报提醒 + 任务逾期）。
 -- dedup_key 与 user_id 组成唯一键做幂等：周报提醒 weekly:<周一>，任务逾期 overdue:<taskId>:<dueDate>，
 -- 每日扫描重复执行不会产生重复通知。收件人级联删除（人没了通知也没意义）。

@@ -395,6 +395,9 @@
         },
         newRun: { result: "PASS", note: "" },
         runBusy: false,
+        caseComments: [],
+        newCommentBody: "",
+        commentBusy: false,
 
         /* 报表 */
         statsLoaded: false,
@@ -431,6 +434,9 @@
       },
       canWrite() {
         return !!this.user && (this.user.role === "ADMIN" || this.user.role === "MEMBER");
+      },
+      currentUserId() {
+        return this.user ? this.user.id : null;
       },
       editorPreview() {
         return renderMarkdown(this.editor.contentMd);
@@ -1772,7 +1778,9 @@
         try {
           this.caseDetail = await api("GET", "/api/test-cases/" + item.id);
           this.caseRuns = (await api("GET", "/api/test-cases/" + item.id + "/runs")) || [];
+          this.caseComments = (await api("GET", "/api/test-cases/" + item.id + "/comments")) || [];
           this.newRun = { result: "PASS", note: "" };
+          this.newCommentBody = "";
         } catch (error) {
           this.fail(error);
         }
@@ -1780,6 +1788,8 @@
       closeCase() {
         this.caseDetail = null;
         this.caseRuns = [];
+        this.caseComments = [];
+        this.newCommentBody = "";
       },
       async addRun() {
         const detail = this.caseDetail;
@@ -1812,6 +1822,54 @@
           this.caseRuns = this.caseRuns.filter((r) => r.id !== run.id);
           await this.openCase(detail);
           await this.loadCases();
+        } catch (error) {
+          this.fail(error);
+        }
+      },
+      async addComment() {
+        const detail = this.caseDetail;
+        const body = (this.newCommentBody || "").trim();
+        if (!detail || !body) {
+          return;
+        }
+        this.commentBusy = true;
+        try {
+          await api("POST", "/api/test-cases/" + detail.id + "/comments", { body });
+          this.toast("评论已发布");
+          this.newCommentBody = "";
+          this.caseComments = (await api("GET", "/api/test-cases/" + detail.id + "/comments")) || [];
+        } catch (error) {
+          this.fail(error);
+        } finally {
+          this.commentBusy = false;
+        }
+      },
+      async editComment(comment) {
+        const detail = this.caseDetail;
+        if (!detail) {
+          return;
+        }
+        const body = window.prompt("编辑评论", comment.body);
+        if (body === null || !body.trim()) {
+          return;
+        }
+        try {
+          await api("PUT", "/api/test-cases/" + detail.id + "/comments/" + comment.id, {
+            body: body.trim(),
+          });
+          this.caseComments = (await api("GET", "/api/test-cases/" + detail.id + "/comments")) || [];
+        } catch (error) {
+          this.fail(error);
+        }
+      },
+      async deleteComment(comment) {
+        const detail = this.caseDetail;
+        if (!detail || !window.confirm("删除这条评论？")) {
+          return;
+        }
+        try {
+          await api("DELETE", "/api/test-cases/" + detail.id + "/comments/" + comment.id);
+          this.caseComments = this.caseComments.filter((c) => c.id !== comment.id);
         } catch (error) {
           this.fail(error);
         }

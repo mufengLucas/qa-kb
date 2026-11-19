@@ -23,6 +23,7 @@ import com.qa.kb.persistence.SessionMapper;
 import com.qa.kb.persistence.SpaceMapper;
 import com.qa.kb.persistence.SpaceMemberMapper;
 import com.qa.kb.persistence.TagMapper;
+import com.qa.kb.persistence.TestCaseCommentMapper;
 import com.qa.kb.persistence.TestCaseMapper;
 import com.qa.kb.persistence.UserMapper;
 import com.qa.kb.project.ProjectService;
@@ -30,6 +31,7 @@ import com.qa.kb.report.ReportService;
 import com.qa.kb.search.SearchService;
 import com.qa.kb.space.SpaceAccessService;
 import com.qa.kb.space.SpaceService;
+import com.qa.kb.testcase.TestCaseCommentService;
 import com.qa.kb.testcase.TestCaseService;
 import com.qa.kb.user.UserService;
 import com.qa.kb.web.AuditInterceptor;
@@ -131,6 +133,16 @@ public class AppConfig {
   @Bean
   public TestCaseService testCaseService(TestCaseMapper testCaseMapper) {
     return new TestCaseService(testCaseMapper);
+  }
+
+  /** A4 用例评论与 @提及。 */
+  @Bean
+  public TestCaseCommentService testCaseCommentService(
+      TestCaseCommentMapper commentMapper,
+      NotificationMapper notificationMapper,
+      TestCaseService testCaseService,
+      Clock clock) {
+    return new TestCaseCommentService(commentMapper, notificationMapper, testCaseService, clock);
   }
 
   /** P2 Phase 5：站内通知（周报提醒 + 任务逾期，每日扫描幂等生成）。 */

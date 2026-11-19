@@ -1260,6 +1260,58 @@
                 </div>
               </div>
             </div>
+
+            <!-- 评论区 -->
+            <div class="card" style="margin-top: 16px">
+              <div class="row">
+                <h3 style="margin: 0">评论</h3>
+                <span class="spacer"></span>
+                <span class="muted small">共 {{ caseComments.length }} 条</span>
+              </div>
+
+              <div v-if="!caseComments.length" class="empty">还没有评论</div>
+              <div v-else class="list" style="margin-top: 12px">
+                <div v-for="comment in caseComments" :key="comment.id" class="list-item">
+                  <div class="row">
+                    <span class="muted small">
+                      {{ comment.authorName || comment.authorLogin || '已删除成员' }}
+                    </span>
+                    <span class="muted small">{{ fmtTime(comment.createdAt) }}</span>
+                    <span v-if="comment.updatedAt" class="muted small">（已编辑）</span>
+                    <span class="spacer"></span>
+                    <button
+                      v-if="comment.authorId === currentUserId"
+                      class="btn sm ghost"
+                      @click="editComment(comment)"
+                    >
+                      编辑
+                    </button>
+                    <button
+                      v-if="comment.authorId === currentUserId || isAdmin"
+                      class="btn sm danger"
+                      @click="deleteComment(comment)"
+                    >
+                      删除
+                    </button>
+                  </div>
+                  <div class="pre-line" style="margin-top: 6px">{{ comment.body }}</div>
+                </div>
+              </div>
+
+              <div v-if="canWrite" class="row" style="margin-top: 12px">
+                <input
+                  class="input"
+                  style="flex: 1"
+                  v-model="newCommentBody"
+                  maxlength="2000"
+                  placeholder="添加评论（可用 @login 提及成员）"
+                  @keyup.enter="addComment"
+                />
+                <button class="btn primary" :disabled="commentBusy" @click="addComment">
+                  {{ commentBusy ? '提交中…' : '发表评论' }}
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- 列表视图 -->

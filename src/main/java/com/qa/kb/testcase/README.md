@@ -23,6 +23,10 @@
 - `GET /api/test-cases?module=&q=&status=&limit=&offset=` → `{total, items, modules}`
 - `POST /api/test-cases`、`GET|PUT|DELETE /api/test-cases/{id}`
 - `GET|POST /api/test-cases/{id}/runs`、`DELETE /api/test-cases/{id}/runs/{runId}`
+- **评论（A4）**：
+  - `GET /api/test-cases/{id}/comments` → 评论列表（时间正序）
+  - `POST /api/test-cases/{id}/comments`：@提及会为被提到的启用用户创建站内通知
+  - `PUT /api/test-cases/{id}/comments/{commentId}`（仅作者）、`DELETE`（作者或管理员，软删除）
 - **CSV 导入导出（A1）**：
   - `GET /api/test-cases/export?module=&q=&status=`：按筛选全量导出用例 CSV（不分页）
   - `GET /api/test-cases/runs/export`：执行记录全量导出（带用例模块/标题与执行人）
